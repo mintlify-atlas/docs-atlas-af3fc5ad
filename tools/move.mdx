@@ -1,0 +1,336 @@
+---
+title: Move
+description: Move mouse cursor or perform drag-and-drop operations
+---
+
+The **Move** tool moves the mouse cursor to specified coordinates or UI elements. Can perform simple hover movements or drag-and-drop operations from the current position to the target.
+
+## Purpose & Use Cases
+
+- **Hover Effects**: Trigger tooltips, menus, or hover states
+- **Cursor Positioning**: Move cursor before scrolling or other actions
+- **Drag and Drop**: Move files, UI elements, or selections
+- **Drawing**: Drag to draw or select areas
+- **Resizing**: Drag window edges or split panes
+- **Selection**: Drag to select text or multiple items
+
+## Parameters
+
+<ParamField path="loc" type="array" optional>
+  Target coordinates `[x, y]` to move to. Either `loc` or `label` must be provided.
+</ParamField>
+
+<ParamField path="label" type="integer" optional>
+  UI element label from Snapshot output. Moves to the center of the labeled element.
+  Either `loc` or `label` must be provided.
+</ParamField>
+
+<ParamField path="drag" type="boolean" default="false">
+  Perform drag-and-drop operation:
+  - `false`: Simple cursor move (hover)
+  - `true`: Drag from current cursor position to target coordinates
+</ParamField>
+
+## Return Values
+
+Returns a success message:
+```
+"Moved the mouse pointer to (640,480)."
+"Dragged to (800,600)."
+```
+
+Throws error if:
+- Neither `loc` nor `label` provided
+- `label` is out of range
+- Desktop state is empty (call Snapshot first when using labels)
+- Coordinates are invalid
+
+## Code Examples
+
+### Simple Cursor Move (Hover)
+```python
+# Move cursor to coordinates
+Move(loc=[640, 480])
+
+# Move to UI element
+Snapshot(use_vision=True)
+Move(label=10)  # Hover over element 10
+```
+
+### Trigger Tooltip
+```python
+# Hover over element to reveal tooltip
+Move(label=15)
+Wait(duration=1)  # Wait for tooltip to appear
+Snapshot(use_vision=True)  # Capture tooltip
+```
+
+### Drag and Drop Files
+```python
+# Drag file to folder
+Snapshot(use_vision=True)
+
+# Position cursor on source file
+Move(label=8)  # File to drag
+
+# Drag to destination folder
+Move(label=12, drag=True)  # Destination folder
+```
+
+### Drag and Drop by Coordinates
+```python
+# Move to start position
+Move(loc=[100, 200])
+
+# Drag to end position
+Move(loc=[500, 600], drag=True)
+```
+
+### Text Selection via Drag
+```python
+# Click at start of text
+Click(loc=[200, 300])
+
+# Drag to end of text to select
+Move(loc=[600, 300], drag=True)
+
+# Copy selection
+Shortcut("ctrl+c")
+```
+
+### Window Resizing
+```python
+# Drag window edge to resize
+Snapshot(use_vision=True)
+
+# Find window edge (right border)
+Move(loc=[1200, 400])  # Position on edge
+
+# Drag to resize
+Move(loc=[1400, 400], drag=True)
+```
+
+## Common Patterns
+
+### Hover Then Click
+```python
+# Hover to reveal submenu, then click option
+Move(label=5)  # Hover over menu
+Wait(duration=0.5)
+Snapshot()
+Click(label=10)  # Click submenu option
+```
+
+### Drag Multiple Items
+```python
+# Drag several files one by one
+files = [8, 9, 10]  # File labels
+destination = 15  # Folder label
+
+for file_label in files:
+    Move(label=file_label)
+    Move(label=destination, drag=True)
+    Wait(duration=0.5)
+```
+
+### Smooth Cursor Movement
+```python
+# Move cursor smoothly across screen
+positions = [
+    [100, 100],
+    [300, 200],
+    [500, 300],
+    [700, 400]
+]
+
+for pos in positions:
+    Move(loc=pos)
+    Wait(duration=0.2)
+```
+
+### Drag to Reorder List Items
+```python
+# Reorder items in a list
+Snapshot(use_vision=True)
+
+# Drag item 3 to position of item 1
+Move(label=3)  # Source item
+Move(label=1, drag=True)  # Target position
+```
+
+### Prepare for Scroll
+```python
+# Position cursor over scrollable area before scrolling
+Move(label=20)  # Scrollable panel
+Scroll(direction="down", wheel_times=5)  # Scroll at cursor position
+```
+
+## Best Practices
+
+<Tip>
+**Wait Before Drag Operations**
+Add a small delay before dragging to ensure cursor is properly positioned:
+```python
+Move(loc=[100, 200])
+Wait(duration=0.3)  # Stabilize cursor
+Move(loc=[500, 600], drag=True)
+```
+</Tip>
+
+<Tip>
+**Use Labels for Reliability**
+Labels automatically target element centers, making drag-and-drop more reliable:
+```python
+Move(label=source_file)
+Move(label=destination_folder, drag=True)
+```
+</Tip>
+
+<Tip>
+**Verify Hover Effects**
+Some UI elements change on hover. Capture state after moving to verify:
+```python
+Move(label=10)
+Wait(duration=0.5)
+Snapshot(use_vision=True)  # Check hover state
+```
+</Tip>
+
+<Warning>
+**Drag Speed**
+Drag operations use `moveSpeed=1` (slow, precise movement). This ensures:
+- UI recognizes the drag operation
+- Drop targets have time to highlight
+- No loss of drag context
+
+For very long drags, expect ~1-2 second duration.
+</Warning>
+
+<Warning>
+**Drag Requires Source Position**
+Drag always starts from the **current cursor position**. Make sure cursor is at the source before dragging:
+```python
+# WRONG: Cursor may not be on source
+Move(label=destination, drag=True)  # Drags from random position!
+
+# CORRECT: Position cursor first
+Click(label=source)  # Or Move(label=source)
+Move(label=destination, drag=True)
+```
+</Warning>
+
+## Advanced Usage
+
+### Drag with Modifiers
+```python
+# Drag with Ctrl held (copy instead of move)
+Move(label=8)  # Source file
+Shortcut("ctrl")  # Hold Ctrl
+Move(label=12, drag=True)  # Drag to destination (copies)
+Wait(duration=0.5)
+```
+
+### Multi-Step Drag
+```python
+# Drag through waypoints
+Move(loc=[100, 100])
+Move(loc=[300, 200], drag=True)  # First segment
+Move(loc=[500, 400], drag=True)  # Second segment
+```
+
+### Drag to Create Selection Box
+```python
+# Drag to create rectangular selection
+Move(loc=[100, 100])  # Top-left corner
+Move(loc=[500, 400], drag=True)  # Bottom-right corner
+Wait(duration=0.5)
+Snapshot(use_vision=True)  # Capture selection
+```
+
+### Hover Detection
+```python
+# Check if element appears on hover
+state_before = Snapshot()
+Move(label=10)
+Wait(duration=0.5)
+state_after = Snapshot()
+
+if has_new_elements(state_before, state_after):
+    print("Hover revealed new elements")
+```
+
+### Precise Edge Dragging
+```python
+# Drag window edge with pixel precision
+window_edge_x = 1200  # Right edge X coordinate
+window_center_y = 400  # Center Y coordinate
+
+Move(loc=[window_edge_x, window_center_y])
+Wait(duration=0.3)
+Move(loc=[window_edge_x + 200, window_center_y], drag=True)
+```
+
+<Accordion title="Drag Implementation Details">
+From `desktop/service.py:662-670`:
+
+```python
+def drag(self, loc: tuple[int, int]|list[int]):
+    if isinstance(loc, list):
+        x, y = loc[0], loc[1]
+    else:
+        x, y = loc
+    sleep(0.5)  # Stabilize before drag
+    cx, cy = uia.GetCursorPos()  # Get current position
+    uia.DragDrop(cx, cy, x, y, moveSpeed=1)  # Slow precise drag
+```
+
+- 0.5 second delay before drag starts
+- `moveSpeed=1`: Slowest speed for maximum reliability
+- Automatic left button press at start, release at end
+</Accordion>
+
+<Accordion title="Move Speed">
+Simple move operations use `moveSpeed=10` (fast):
+```python
+def move(self, loc: tuple[int, int]):
+    x, y = loc
+    uia.MoveTo(x, y, moveSpeed=10)  # Fast movement
+```
+
+This provides quick cursor positioning without drag delays.
+</Accordion>
+
+## Related Tools
+
+- [Click](/tools/click) - Click after moving cursor
+- [Snapshot](/tools/snapshot) - Discover UI element positions
+- [Scroll](/tools/scroll) - Scroll at cursor position
+- [MultiSelect](/tools/multiselect) - Alternative for selecting multiple items
+- [Type](/tools/type) - Type after clicking/moving to input field
+
+## Troubleshooting
+
+<Accordion title="Drag not working">
+**Possible causes:**
+- Cursor not positioned at source before drag
+- Drag speed too fast for application to recognize
+- Drop target doesn't accept the dragged item type
+- Application requires modifier keys (Ctrl, Shift) during drag
+
+**Solutions:**
+- Add `Wait(duration=0.5)` before drag
+- Explicitly position cursor at source first
+- Check if application requires special drag gestures
+</Accordion>
+
+<Accordion title="Hover effects not appearing">
+**Possible causes:**
+- Insufficient wait time after move
+- Element requires click focus, not just hover
+- Application doesn't support hover effects
+
+**Solutions:**
+- Increase wait time to 1-2 seconds
+- Try clicking instead of hovering
+- Verify element supports hover in manual testing
+</Accordion>

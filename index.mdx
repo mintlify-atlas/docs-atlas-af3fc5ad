@@ -1,97 +1,95 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Windows-MCP Documentation"
+description: "MCP server framework enabling seamless integration between AI agents and Windows OS for desktop automation"
 ---
 
-## Setting up
+<img
+  className="block dark:hidden"
+  src="https://media.brand.dev/14f26bac-9702-4730-ad41-d203a0929684.png"
+  alt="Windows-MCP Logo"
+  width="200"
+/>
+<img
+  className="hidden dark:block"
+  src="https://media.brand.dev/14f26bac-9702-4730-ad41-d203a0929684.png"
+  alt="Windows-MCP Logo"
+  width="200"
+/>
 
-Get your documentation site up and running in minutes.
+# Welcome to Windows-MCP
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+Windows-MCP is a lightweight, open-source MCP (Model Context Protocol) server that bridges the gap between AI agents and the Windows operating system. It enables seamless desktop automation, UI interaction, and system control through 15 powerful tools.
 
-## Make it yours
+## Key Features
 
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="15 MCP Tools" icon="wrench" href="/tools/overview">
+    Comprehensive toolkit for Windows automation including mouse, keyboard, UI detection, and system management
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="UI Automation" icon="desktop" href="/concepts/ui-automation">
+    Detect and interact with UI elements via Windows Accessibility tree with real-time element discovery
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Browser Automation" icon="browser" href="/guides/browser-automation">
+    Clean DOM extraction for web automation without browser UI clutter
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Remote Mode" icon="cloud" href="/guides/remote-mode">
+    Deploy on cloud VMs with windowsmcp.io for remote Windows automation
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Quick Start
 
-Everything you need to create world-class documentation.
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install Windows-MCP with PyPI or from source in minutes
+  </Card>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Get up and running with your first automation in 5 minutes
+  </Card>
+  <Card title="Client Setup" icon="plug" href="/guides/client-setup">
+    Configure Claude Desktop, Perplexity, Gemini CLI, or other MCP clients
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/concepts/architecture">
+    Learn how Windows-MCP's service-based architecture works
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Popular Tools
 
-## Need inspiration?
+<CardGroup cols={3}>
+  <Card title="Snapshot" icon="camera" href="/tools/snapshot">
+    Capture desktop state with UI elements and screenshots
+  </Card>
+  <Card title="Click" icon="mouse-pointer" href="/tools/click">
+    Perform mouse clicks at coordinates or UI elements
+  </Card>
+  <Card title="Type" icon="keyboard" href="/tools/type">
+    Type text at specific locations or UI elements
+  </Card>
+  <Card title="App" icon="window-restore" href="/tools/app">
+    Launch, resize, and switch between applications
+  </Card>
+  <Card title="Shell" icon="terminal" href="/tools/shell">
+    Execute PowerShell commands with full system access
+  </Card>
+  <Card title="Scrape" icon="globe" href="/tools/scrape">
+    Fetch and extract web page content
+  </Card>
+</CardGroup>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+## Community & Support
+
+<CardGroup cols={2}>
+  <Card title="Discord Community" icon="discord" href="https://discord.com/invite/Aue9Yj2VzS">
+    Join our Discord for help, discussions, and updates
+  </Card>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/CursorTouch/Windows-MCP">
+    View source code, report issues, and contribute
+  </Card>
+  <Card title="Security Policy" icon="shield" href="/resources/security">
+    Review security guidelines and best practices
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/development/contributing">
+    Learn how to contribute to Windows-MCP
+  </Card>
+</CardGroup>

@@ -1,0 +1,286 @@
+---
+title: MultiEdit
+description: Fill multiple input fields in one operation for fast form completion
+---
+
+The MultiEdit tool efficiently enters text into multiple input fields at once. It's ideal for form filling, batch data entry, and multi-field updates.
+
+## Overview
+
+MultiEdit clicks each field, clears existing content, and types the new text. All fields are processed in sequence with automatic focus management.
+
+<Note>
+  Each field is cleared before typing. To preserve existing content, use individual Type tool calls with `clear=False`.
+</Note>
+
+## Parameters
+
+<ParamField path="locs" type="array">
+  List of `[x, y, text]` tuples for coordinate-based input.
+  
+  **Example:** `[[100, 200, "John"], [100, 250, "Doe"], [100, 300, "john@email.com"]]`
+</ParamField>
+
+<ParamField path="labels" type="array">
+  List of `[label, text]` tuples for label-based input.
+  
+  **Example:** `[[5, "John"], [7, "Doe"], [9, "john@email.com"]]`
+</ParamField>
+
+<Note>
+  You must provide **either** `locs` or `labels`, but not both.
+</Note>
+
+## Return Values
+
+Returns a confirmation string listing all edited fields:
+```
+Multi-edited elements at: (100,200) with text 'John', (100,250) with text 'Doe', (100,300) with text 'john@email.com'
+```
+
+## Examples
+
+### Form Filling with Labels
+
+```python
+# 1. Take snapshot to identify form fields
+Snapshot(use_annotation=True)
+
+# 2. Fill all fields at once
+MultiEdit(
+    labels=[
+        [5, "John"],
+        [7, "Doe"],
+        [9, "john.doe@email.com"],
+        [11, "555-1234"],
+        [13, "123 Main St"]
+    ]
+)
+```
+
+### Form Filling with Coordinates
+
+```python
+# Fill registration form using exact coordinates
+MultiEdit(
+    locs=[
+        [300, 200, "Username123"],
+        [300, 250, "SecurePass456!"],
+        [300, 300, "SecurePass456!"],  # Confirm password
+        [300, 350, "user@example.com"]
+    ]
+)
+```
+
+### Spreadsheet Data Entry
+
+```python
+# Fill multiple cells in Excel/Google Sheets
+Snapshot()
+
+MultiEdit(
+    labels=[
+        [10, "Q1"],
+        [11, "25000"],
+        [12, "Q2"],
+        [13, "28500"],
+        [14, "Q3"],
+        [15, "31200"]
+    ]
+)
+```
+
+### Configuration Forms
+
+```python
+# Update application settings
+MultiEdit(
+    labels=[
+        [8, "api.example.com"],
+        [10, "443"],
+        [12, "30"],
+        [14, "true"]
+    ]
+)
+```
+
+## Common Patterns
+
+### User Registration
+
+```python
+# Complete registration form
+# 1. Navigate to form
+Scrape(url="https://app.com/register", use_dom=True)
+Snapshot(use_annotation=True)
+
+# 2. Fill all fields
+MultiEdit(
+    labels=[
+        [5, "john_smith"],        # Username
+        [7, "john@email.com"],    # Email
+        [9, "P@ssw0rd123"],       # Password
+        [11, "P@ssw0rd123"],      # Confirm
+        [13, "John"],             # First name
+        [15, "Smith"],            # Last name
+        [17, "555-0123"]          # Phone
+    ]
+)
+
+# 3. Submit
+Click(label=20)  # Submit button
+```
+
+### Contact Form
+
+```python
+# Fill contact form
+Snapshot(use_annotation=True)
+
+MultiEdit(
+    labels=[
+        [5, "John Doe"],
+        [7, "john@company.com"],
+        [9, "Product Inquiry"],
+        [11, "I'm interested in learning more about your enterprise plan."]
+    ]
+)
+
+Click(label=13)  # Send button
+```
+
+### E-commerce Checkout
+
+```python
+# Fill shipping information
+MultiEdit(
+    labels=[
+        [10, "John Doe"],
+        [12, "123 Main Street"],
+        [14, "Apt 4B"],
+        [16, "New York"],
+        [18, "NY"],
+        [20, "10001"],
+        [22, "555-1234"]
+    ]
+)
+
+Click(label=25)  # Continue to payment
+```
+
+### Survey/Quiz Completion
+
+```python
+# Fill text-based survey responses
+Snapshot()
+
+MultiEdit(
+    labels=[
+        [5, "Excellent"],
+        [8, "Very satisfied"],
+        [11, "Daily"],
+        [14, "Would recommend to colleagues"],
+        [17, "Intuitive interface and fast performance"]
+    ]
+)
+```
+
+## Field Processing Order
+
+Fields are processed **sequentially** in the order provided:
+1. Click field
+2. Clear existing text (`Ctrl+A` → `Backspace`)
+3. Type new text
+4. Move to next field
+
+<Warning>
+  If a field triggers validation or auto-save on blur, it will execute before the next field is focused.
+</Warning>
+
+## Text Handling
+
+- **Special characters:** Automatically escaped (e.g., `{`, `}`, newlines)
+- **Line breaks:** `\n` converted to `{Enter}`
+- **Tabs:** `\t` converted to `{Tab}`
+- **Clearing:** Always uses `Ctrl+A` → `Backspace` sequence
+
+## Error Handling
+
+```python
+# Missing parameters
+"Either locs or labels must be provided."
+
+# Invalid label format
+"Each label item must be [label, text]. Invalid: [5]"
+
+# Label not found
+"Failed to process label item [99, 'text']: IndexError"
+
+# No snapshot
+"Desktop state is empty. Please call Snapshot first."
+```
+
+## Best Practices
+
+<Tip>
+  **Call Snapshot immediately before** MultiEdit to ensure fresh UI element data.
+</Tip>
+
+<Tip>
+  **Group related fields** together in a single MultiEdit call for speed and atomicity.
+</Tip>
+
+<Tip>
+  **Verify submission** with a Snapshot after form fill to ensure no validation errors.
+</Tip>
+
+<Warning>
+  **Watch for auto-complete:** Some fields trigger dropdowns or suggestions. If interference occurs, use individual Type calls with `press_enter=False`.
+</Warning>
+
+## Labels vs Coordinates
+
+| Approach | Best For | Trade-offs |
+|----------|----------|------------|
+| **Labels** | Dynamic forms | Requires Snapshot, adapts to layout changes |
+| **Coordinates** | Fixed layouts | Faster, no Snapshot needed, brittle to UI changes |
+
+## When to Use
+
+**Use MultiEdit when:**
+- Filling 3+ fields in a form
+- All fields accept text input
+- Fields don't have complex validation
+- Speed is important
+
+**Use individual Type when:**
+- Field has special behavior (e.g., date picker, auto-complete)
+- Need to preserve existing content
+- Validation must be checked between fields
+- Need `press_enter=True` for submission
+
+## Performance
+
+Typical timing per field:
+- Click: 0.1s
+- Clear: 0.5s
+- Type: 0.02s per character
+- **Total per field:** ~1-2 seconds
+
+<Tip>
+  For 5 fields, MultiEdit takes ~5-10 seconds vs ~15-25 seconds with individual Type calls.
+</Tip>
+
+## Limitations
+
+- All fields are cleared before typing (no append mode)
+- No field-specific options (e.g., `press_enter`, `caret_position`)
+- Sequential processing only (no parallelization)
+- Requires all fields to be visible on screen
+
+## Related Tools
+
+- [Type](/tools/type) - Single field input with advanced options
+- [Click](/tools/click) - Focus fields or click buttons
+- [Snapshot](/tools/snapshot) - Identify form field labels
+- [Shortcut](/tools/shortcut) - Submit forms (Enter) or navigate (Tab)

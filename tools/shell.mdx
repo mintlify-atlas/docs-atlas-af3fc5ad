@@ -1,0 +1,552 @@
+---
+title: PowerShell
+description: Execute PowerShell commands with full system access
+---
+
+The **PowerShell** tool (also called "Shell") executes PowerShell commands with full system access. It's the primary interface for system automation, file operations, network tasks, and administrative actions.
+
+<Warning>
+**Full System Access**: This tool has unrestricted access to the operating system. Commands can:
+- Modify system files and registry
+- Install/uninstall software
+- Change security settings
+- Access network resources
+- Execute any PowerShell cmdlet or script
+
+Use with caution and validate commands before execution.
+</Warning>
+
+## Purpose & Use Cases
+
+- **System Administration**: Manage services, processes, users, permissions
+- **File Operations**: Complex file/directory operations beyond FileSystem tool
+- **Network Tasks**: Download files, test connectivity, access APIs
+- **Process Management**: Start/stop processes with arguments
+- **Registry Access**: Read/write registry beyond Registry tool
+- **Script Execution**: Run PowerShell scripts and batch operations
+- **Web Requests**: Fetch web content via Invoke-WebRequest
+
+## Parameters
+
+<ParamField path="command" type="string" required>
+  PowerShell command or script to execute. Supports:
+  - Single cmdlets: `Get-Process`, `Get-Service`
+  - Pipelines: `Get-ChildItem | Select-Object Name`
+  - Scripts: Multi-line PowerShell code
+  - Native commands: `ipconfig`, `ping`, `ssh`
+</ParamField>
+
+<ParamField path="timeout" type="integer" default="30">
+  Maximum execution time in seconds. Command is terminated if it exceeds this duration.
+  
+  Range: 1-300 seconds (5 minutes max recommended)
+</ParamField>
+
+## Return Values
+
+Returns a formatted string:
+```
+Response: <command output>
+Status Code: <exit code>
+```
+
+- **Status Code 0**: Success
+- **Status Code 1**: Error or failure
+- **Response**: Command stdout/stderr output
+
+### Success Example
+```
+Response: Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+Status Code: 0
+```
+
+### Error Example
+```
+Response: Get-InvalidCmdlet : The term 'Get-InvalidCmdlet' is not recognized...
+Status Code: 1
+```
+
+### Timeout Example
+```
+Response: Command execution timed out
+Status Code: 1
+```
+
+## Code Examples
+
+### Basic System Information
+```python
+# Get Windows version
+PowerShell(command="(Get-CimInstance Win32_OperatingSystem).Caption")
+# Returns: "Microsoft Windows 11 Pro"
+
+# Get computer name
+PowerShell(command="$env:COMPUTERNAME")
+
+# Get current user
+PowerShell(command="$env:USERNAME")
+
+# Get system uptime
+PowerShell(command="(Get-CimInstance Win32_OperatingSystem).LastBootUpTime")
+```
+
+### File Operations
+```python
+# List files in directory
+PowerShell(
+    command='Get-ChildItem -Path "C:\\Users" | Select-Object Name, Length'
+)
+
+# Find files by extension
+PowerShell(
+    command='Get-ChildItem -Path "C:\\" -Filter "*.txt" -Recurse -ErrorAction SilentlyContinue'
+)
+
+# Get file hash
+PowerShell(
+    command='Get-FileHash -Path "C:\\file.txt" -Algorithm SHA256 | Select-Object Hash'
+)
+
+# Create directory
+PowerShell(
+    command='New-Item -ItemType Directory -Path "C:\\MyFolder"'
+)
+```
+
+### Process Management
+```python
+# List running processes
+PowerShell(
+    command='Get-Process | Select-Object Name, ID, CPU | Sort-Object CPU -Descending | Select-Object -First 10'
+)
+
+# Start application with arguments
+PowerShell(
+    command='Start-Process "notepad.exe" -ArgumentList "C:\\file.txt" -PassThru'
+)
+
+# Stop process by name
+PowerShell(
+    command='Stop-Process -Name "notepad" -Force'
+)
+```
+
+### Network Operations
+```python
+# Test internet connectivity
+PowerShell(
+    command='Test-NetConnection -ComputerName "google.com" -Port 443'
+)
+
+# Download file
+PowerShell(
+    command='Invoke-WebRequest -Uri "https://example.com/file.txt" -OutFile "C:\\downloaded.txt"',
+    timeout=60
+)
+
+# Get public IP address
+PowerShell(
+    command='(Invoke-WebRequest -Uri "https://api.ipify.org").Content'
+)
+
+# DNS lookup
+PowerShell(
+    command='Resolve-DnsName -Name "example.com"'
+)
+```
+
+### Service Management
+```python
+# List services
+PowerShell(
+    command='Get-Service | Where-Object {$_.Status -eq "Running"} | Select-Object Name, DisplayName'
+)
+
+# Start service
+PowerShell(
+    command='Start-Service -Name "Spooler"'
+)
+
+# Stop service
+PowerShell(
+    command='Stop-Service -Name "Spooler" -Force'
+)
+
+# Get service status
+PowerShell(
+    command='Get-Service -Name "Spooler" | Select-Object Status'
+)
+```
+
+### Registry Operations
+```python
+# Read registry value
+PowerShell(
+    command='Get-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer" -Name "ShellState"'
+)
+
+# Set registry value
+PowerShell(
+    command='Set-ItemProperty -Path "HKCU:\\Software\\MyApp" -Name "Setting" -Value "Value"'
+)
+
+# Create registry key
+PowerShell(
+    command='New-Item -Path "HKCU:\\Software\\MyApp" -Force'
+)
+```
+
+### System Configuration
+```python
+# Get environment variables
+PowerShell(
+    command='Get-ChildItem Env: | Select-Object Name, Value'
+)
+
+# Set environment variable (session only)
+PowerShell(
+    command='$env:MY_VAR="value"'
+)
+
+# Get installed programs
+PowerShell(
+    command='Get-ItemProperty HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName, DisplayVersion'
+)
+```
+
+## Common Patterns
+
+### Execute Multi-Line Script
+```python
+# Complex script with multiple steps
+script = '''
+$processes = Get-Process | Where-Object {$_.CPU -gt 100}
+foreach ($proc in $processes) {
+    Write-Output "High CPU: $($proc.Name) - $($proc.CPU)"
+}
+'''
+
+PowerShell(command=script, timeout=30)
+```
+
+### Error Handling
+```python
+# Suppress errors in command
+PowerShell(
+    command='Get-ChildItem -Path "C:\\NonExistent" -ErrorAction SilentlyContinue'
+)
+
+# Parse response to check for errors
+result = PowerShell(command='Get-Service -Name "InvalidService"')
+if "Status Code: 1" in result:
+    print("Command failed")
+```
+
+### Export Data to CSV
+```python
+# Export process list to CSV
+PowerShell(
+    command='Get-Process | Export-Csv -Path "C:\\processes.csv" -NoTypeInformation'
+)
+
+# Read CSV back
+PowerShell(
+    command='Import-Csv -Path "C:\\processes.csv" | Select-Object -First 5'
+)
+```
+
+### Run as Administrator (if MCP server has elevation)
+```python
+# Administrative task
+PowerShell(
+    command='Get-EventLog -LogName System -Newest 10'
+)
+```
+
+### Schedule Task
+```python
+# Create scheduled task
+PowerShell(
+    command='''
+$action = New-ScheduledTaskAction -Execute "notepad.exe"
+$trigger = New-ScheduledTaskTrigger -Daily -At "9AM"
+Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "MyTask"
+'''
+)
+```
+
+## Best Practices
+
+<Tip>
+**Escape Paths Properly**
+Use double backslashes in Python strings or raw strings:
+```python
+# GOOD: Double backslashes
+PowerShell(command='Get-Content "C:\\Users\\file.txt"')
+
+# GOOD: Raw string
+PowerShell(command=r'Get-Content "C:\Users\file.txt"')
+
+# BAD: Single backslash (escape error)
+PowerShell(command='Get-Content "C:\Users\file.txt"')
+```
+</Tip>
+
+<Tip>
+**Use ErrorAction for Reliability**
+Prevent script-breaking errors:
+```python
+PowerShell(
+    command='Get-ChildItem -Path "C:\\*" -Recurse -ErrorAction SilentlyContinue'
+)
+```
+</Tip>
+
+<Tip>
+**Increase Timeout for Long Operations**
+```python
+# Default 30s may not be enough
+PowerShell(
+    command='Invoke-WebRequest -Uri "https://large-file.com/data.zip" -OutFile "C:\\data.zip"',
+    timeout=300  # 5 minutes
+)
+```
+</Tip>
+
+<Tip>
+**Format Output for Readability**
+```python
+# Use Select-Object and Format-Table
+PowerShell(
+    command='Get-Process | Select-Object Name, CPU, Memory | Format-Table -AutoSize'
+)
+```
+</Tip>
+
+<Warning>
+**Command Injection Risk**
+Never concatenate untrusted input into commands:
+```python
+# DANGEROUS: User input in command
+user_input = get_user_input()
+PowerShell(command=f'Remove-Item "{user_input}"')  # Can delete anything!
+
+# SAFER: Validate and sanitize input first
+if is_safe_path(user_input):
+    PowerShell(command=f'Remove-Item "{user_input}"')
+```
+</Warning>
+
+<Warning>
+**Irreversible Operations**
+Some commands cannot be undone:
+- `Remove-Item -Recurse` (delete files)
+- `Stop-Process -Force` (kill processes)
+- `Set-ItemProperty` (modify registry)
+- `Disable-NetAdapter` (disable network)
+
+Always validate before executing destructive commands.
+</Warning>
+
+## Advanced Usage
+
+### Invoke REST API
+```python
+# GET request
+PowerShell(
+    command='''
+$response = Invoke-RestMethod -Uri "https://api.example.com/data" -Method Get
+$response | ConvertTo-Json
+'''
+)
+
+# POST request with JSON body
+PowerShell(
+    command='''
+$body = @{name="John"; age=30} | ConvertTo-Json
+$response = Invoke-RestMethod -Uri "https://api.example.com/users" -Method Post -Body $body -ContentType "application/json"
+$response | ConvertTo-Json
+'''
+)
+```
+
+### Parse JSON Output
+```python
+# Get structured data
+PowerShell(
+    command='''
+Get-Process | Select-Object Name, CPU, Memory -First 5 | ConvertTo-Json
+'''
+)
+```
+
+### Parallel Execution
+```python
+# Run multiple commands in parallel (PowerShell 7+)
+PowerShell(
+    command='''
+1..5 | ForEach-Object -Parallel {
+    Start-Sleep -Seconds 1
+    Write-Output "Task $_ complete"
+} -ThrottleLimit 5
+'''
+)
+```
+
+### Access Windows APIs
+```python
+# Call .NET classes
+PowerShell(
+    command='''
+Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.MessageBox]::Show("Hello from PowerShell!")
+'''
+)
+```
+
+### Remote Execution (if configured)
+```python
+# Execute command on remote machine
+PowerShell(
+    command='Invoke-Command -ComputerName "RemotePC" -ScriptBlock { Get-Process }',
+    timeout=60
+)
+```
+
+<Accordion title="PowerShell vs Command Prompt">
+The Shell tool uses **PowerShell** (not cmd.exe) because:
+
+**Advantages:**
+- Object-oriented pipeline (not just text)
+- Rich cmdlet library (Get-Process, Get-Service, etc.)
+- .NET integration
+- JSON/XML support built-in
+- Better error handling
+
+**Running CMD commands:**
+Most cmd.exe commands work in PowerShell:
+```python
+PowerShell(command='ipconfig /all')
+PowerShell(command='ping google.com')
+```
+
+For true cmd.exe compatibility:
+```python
+PowerShell(command='cmd /c "dir C:\\ && echo Done"')
+```
+</Accordion>
+
+<Accordion title="UTF-8 Encoding Handling">
+The tool automatically configures UTF-8 encoding:
+
+```python
+# Automatically prepended to all commands:
+$OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+```
+
+This ensures:
+- Non-ASCII characters display correctly
+- International text is preserved
+- Native exe output is readable
+</Accordion>
+
+<Accordion title="Environment Path Rebuilding">
+The tool rebuilds PATH from the registry to ensure system executables are discoverable:
+
+```python
+# Reads from registry:
+# HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment
+# HKCU\Environment
+
+# Merges: Machine PATH + User PATH + Inherited PATH
+```
+
+This allows commands like:
+```python
+PowerShell(command='ssh user@host')  # Works even if not in inherited PATH
+```
+</Accordion>
+
+## Related Tools
+
+- [FileSystem](/tools/filesystem) - Simpler file operations (read, write, list)
+- [Process](/tools/process) - Dedicated process management tool
+- [Registry](/tools/registry) - Dedicated registry tool
+- [App](/tools/app) - Launch applications (simpler than PowerShell Start-Process)
+- [Clipboard](/tools/clipboard) - Clipboard operations (easier than PowerShell)
+
+## Implementation Details
+
+From `__main__.py:100-106` and `desktop/service.py:277-344`:
+
+```python
+def execute_command(self, command: str, timeout: int = 10) -> tuple[str, int]:
+    # UTF-8 encoding setup
+    utf8_command = (
+        "$OutputEncoding = [System.Text.Encoding]::UTF8; "
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+        f"{command}"
+    )
+    
+    # Base64 encode for safe execution
+    encoded = base64.b64encode(utf8_command.encode("utf-16le")).decode("ascii")
+    
+    # Rebuild PATH from registry
+    env = os.environ.copy()
+    # ... PATH rebuilding logic ...
+    
+    # Choose PowerShell version
+    shell = "pwsh" if shutil.which("pwsh") else "powershell"
+    
+    # Execute
+    args = [shell, "-NoProfile", "-EncodedCommand", encoded]
+    result = subprocess.run(args, capture_output=True, timeout=timeout, env=env)
+    
+    return (stdout or stderr, result.returncode)
+```
+
+**Key features:**
+- Base64 encoding prevents command parsing issues
+- UTF-8 encoding for international character support
+- PATH rebuilt from registry for system command access
+- Prefers PowerShell 7+ (`pwsh`) over Windows PowerShell 5.1
+- `-NoProfile` for faster startup
+- Automatic stdout/stderr capture
+
+## Troubleshooting
+
+<Accordion title="Timeout errors">
+**Symptom:** "Command execution timed out"
+
+**Solutions:**
+- Increase timeout parameter: `timeout=60` or higher
+- Check if command is hanging (waiting for input)
+- For long-running tasks, consider breaking into smaller commands
+- Use `-ErrorAction Stop` to fail fast on errors
+</Accordion>
+
+<Accordion title="Permission denied errors">
+**Symptom:** "Access is denied" or "Unauthorized"
+
+**Causes:**
+- MCP server not running with administrator privileges
+- File/folder permissions restrict access
+- UAC blocking the operation
+
+**Solutions:**
+- Run MCP server as administrator (right-click → Run as administrator)
+- Use `FileSystem` tool for basic file operations (may have better permissions)
+- Check file/folder permissions: `icacls "C:\path"`
+</Accordion>
+
+<Accordion title="Command not found">
+**Symptom:** "The term 'xyz' is not recognized..."
+
+**Solutions:**
+- Use full path to executable: `"C:\\Program Files\\App\\app.exe"`
+- Check if application is installed
+- Verify PATH environment variable includes the executable's directory
+- Use `Get-Command xyz` to locate the executable
+</Accordion>

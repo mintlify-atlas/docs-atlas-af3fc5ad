@@ -1,0 +1,343 @@
+---
+title: Wait
+description: Pause execution for precise timing in automation workflows
+---
+
+The Wait tool pauses execution for a specified duration in seconds. Use it to synchronize actions, allow UIs to load, or pace operations.
+
+## Overview
+
+Wait provides simple time-based delays for:
+- Waiting for applications to launch
+- Allowing UI animations to complete
+- Giving pages time to load
+- Synchronizing between rapid actions
+- Pacing API calls or operations
+
+<Note>
+  Wait blocks execution completely. For dynamic waiting based on UI state, use Snapshot in a loop instead.
+</Note>
+
+## Parameters
+
+<ParamField path="duration" type="integer" required>
+  Number of seconds to wait.
+  
+  **Example:** `2` for 2 seconds, `0.5` for half a second
+</ParamField>
+
+## Return Values
+
+Returns a confirmation:
+```
+Waited for 3 seconds.
+```
+
+## Examples
+
+### Basic Wait
+
+```python
+# Wait 2 seconds
+Wait(duration=2)
+```
+
+### After Launching App
+
+```python
+# Launch application and wait for startup
+App(mode="launch", name="chrome")
+Wait(duration=3)
+
+# Now interact with UI
+Snapshot()
+```
+
+### Between UI Actions
+
+```python
+# Click button
+Click(loc=[400, 300])
+
+# Wait for dialog to appear
+Wait(duration=1)
+
+# Continue with dialog
+Snapshot(use_annotation=True)
+```
+
+### Page Load
+
+```python
+# Navigate to URL
+Click(loc=[300, 50])  # Address bar
+Type(text="https://example.com")
+Shortcut("enter")
+
+# Wait for page to load
+Wait(duration=5)
+
+# Scrape content
+Scrape(url="https://example.com", use_dom=True)
+```
+
+## Common Patterns
+
+### Application Launch Workflow
+
+```python
+# 1. Launch application
+App(mode="launch", name="excel")
+
+# 2. Wait for window to open
+Wait(duration=4)
+
+# 3. Verify it's ready
+Snapshot()
+
+# 4. Proceed with automation
+Click(label=5)
+```
+
+### Multi-Step Operations
+
+```python
+# Step 1: Open file
+Shortcut("ctrl+o")
+Wait(duration=1)
+
+# Step 2: Type filename
+Type(text="document.txt")
+Wait(duration=0.5)
+
+# Step 3: Confirm
+Shortcut("enter")
+Wait(duration=2)
+```
+
+### Animation Delays
+
+```python
+# Click menu item
+Click(loc=[100, 50])
+
+# Wait for dropdown animation
+Wait(duration=0.3)
+
+# Click submenu
+Click(loc=[150, 100])
+```
+
+### Rapid Click Prevention
+
+```python
+# Click items with delay to avoid issues
+items = [[200, 100], [200, 150], [200, 200]]
+
+for item in items:
+    Click(loc=item)
+    Wait(duration=0.5)  # Prevent double-clicks
+```
+
+### Dialog Handling
+
+```python
+# Trigger action that shows dialog
+Click(label=10)
+
+# Wait for dialog to appear
+Wait(duration=1)
+
+# Take snapshot to see dialog elements
+Snapshot(use_annotation=True)
+
+# Interact with dialog
+Click(label=15)  # OK button
+```
+
+### Form Submission
+
+```python
+# Fill form
+MultiEdit(
+    labels=[
+        [5, "John Doe"],
+        [7, "john@email.com"]
+    ]
+)
+
+# Wait before submitting (allow validation)
+Wait(duration=1)
+
+# Submit
+Click(label=10)
+
+# Wait for confirmation page
+Wait(duration=3)
+```
+
+### Network Requests
+
+```python
+# Trigger download
+Click(label=20)  # Download button
+
+# Wait for download to start
+Wait(duration=2)
+
+# Check download progress
+Snapshot()
+```
+
+## Timing Guidelines
+
+### Application Launch
+| Application Type | Recommended Wait |
+|-----------------|------------------|
+| **Lightweight** (Notepad) | 1-2 seconds |
+| **Medium** (Explorer) | 2-3 seconds |
+| **Heavy** (Office apps) | 3-5 seconds |
+| **Very Heavy** (IDEs, browsers) | 5-10 seconds |
+
+### UI Interactions
+| Action Type | Recommended Wait |
+|------------|------------------|
+| **Animations** | 0.3-0.5 seconds |
+| **Menu expansion** | 0.2-0.3 seconds |
+| **Dialog appearance** | 0.5-1 second |
+| **Page navigation** | 2-5 seconds |
+| **File operations** | 1-3 seconds |
+
+<Tip>
+  **Start with longer waits** during development, then optimize down based on actual timing.
+</Tip>
+
+## When to Use Wait
+
+**Use Wait when:**
+- Launching applications
+- Waiting for known UI delays
+- Pacing rapid operations
+- Allowing animations to complete
+- Synchronizing with external systems
+
+**Don't use Wait when:**
+- Waiting for specific UI elements (use Snapshot loop)
+- Timing is unpredictable (use retry logic)
+- You need to react to state changes (use polling)
+
+## Dynamic Waiting Alternative
+
+```python
+# Instead of fixed wait:
+Click(label=10)
+Wait(duration=5)  # Might be too long or too short
+
+# Use polling for reliability:
+Click(label=10)
+for i in range(10):  # Try up to 10 times
+    Wait(duration=0.5)
+    state = Snapshot()
+    if "Expected Element" in state:
+        break
+```
+
+## Best Practices
+
+<Tip>
+  **Use shorter waits more frequently** instead of one long wait. This makes debugging easier.
+</Tip>
+
+```python
+# Good: Multiple short waits
+App(mode="launch", name="app")
+Wait(duration=1)
+Snapshot()  # Check if it's open
+Wait(duration=2)  # Wait more if needed
+
+# Bad: One long wait
+App(mode="launch", name="app")
+Wait(duration=10)  # Wastes time if app opens quickly
+```
+
+<Tip>
+  **Add waits after user-facing actions** (clicks, types) to mimic human pacing.
+</Tip>
+
+<Warning>
+  **Avoid very long waits** (>30 seconds). Use polling loops or Snapshot checks instead.
+</Warning>
+
+## Fractional Seconds
+
+```python
+# Supported (but uncommon in automation)
+Wait(duration=0.5)   # 500ms
+Wait(duration=0.25)  # 250ms
+Wait(duration=0.1)   # 100ms
+```
+
+<Note>
+  For sub-second precision, the actual delay may vary by 10-50ms due to OS scheduling.
+</Note>
+
+## Performance Impact
+
+Wait durations directly impact total automation time:
+
+```python
+# Example: Form filling
+MultiEdit(labels=[[5, "text"], [7, "text"]])  # 2 seconds
+Wait(duration=1)  # 1 second
+Click(label=10)  # 0.5 seconds
+Wait(duration=3)  # 3 seconds
+# Total: ~6.5 seconds
+```
+
+**Optimization:**
+- Remove unnecessary waits
+- Reduce duration when safe
+- Use dynamic waiting for variable tasks
+
+## Error Handling
+
+Wait itself rarely fails, but errors can occur:
+
+```python
+# Invalid duration (negative)
+"Invalid duration: must be positive"
+
+# Duration too large
+"Duration exceeds maximum allowed (3600 seconds)"
+```
+
+## Use Cases
+
+### Testing
+- Allow UI to stabilize between test steps
+- Pace operations to avoid race conditions
+- Simulate human interaction speed
+
+### Automation
+- Wait for external processes to complete
+- Synchronize with batch jobs
+- Rate-limit API calls
+
+### UI Interaction
+- Allow animations to finish
+- Give dialogs time to appear
+- Wait for page loads
+
+## Limitations
+
+- **Fixed duration** - Can't adapt to actual load times
+- **Blocking** - Prevents other operations during wait
+- **No events** - Can't detect when condition is met
+- **Imprecise** - May vary by ±50ms on busy systems
+
+## Related Tools
+
+- [Snapshot](/tools/snapshot) - Check UI state to determine when to proceed
+- [App](/tools/app) - Launch applications (often requires wait after)
+- [Click](/tools/click) - Trigger actions that need wait for response
+- [Scrape](/tools/scrape) - Often requires wait for page load

@@ -1,0 +1,380 @@
+---
+title: Process
+description: List and manage running Windows processes with filtering and termination
+---
+
+The Process tool provides system-level process management capabilities. Use it to monitor running applications, find resource-heavy processes, and terminate unresponsive or unwanted programs.
+
+## Overview
+
+Process operates in two modes:
+- **list** - View running processes with CPU/memory usage
+- **kill** - Terminate processes by PID or name
+
+<Warning>
+  Killing system processes can cause instability or data loss. Always verify the process before terminating.
+</Warning>
+
+## Parameters
+
+<ParamField path="mode" type="string" required>
+  Operation mode.
+  
+  Options: `list`, `kill`
+</ParamField>
+
+<ParamField path="name" type="string">
+  Process name to filter or terminate. Uses fuzzy matching (60% threshold).
+  
+  **Example:** `"chrome"` matches `chrome.exe`
+</ParamField>
+
+<ParamField path="pid" type="integer">
+  Process ID to terminate. Required for `kill` mode if `name` is not provided.
+</ParamField>
+
+<ParamField path="sort_by" type="string" default="memory">
+  Sort criteria for `list` mode.
+  
+  Options: `memory`, `cpu`, `name`
+</ParamField>
+
+<ParamField path="limit" type="integer" default="20">
+  Maximum number of processes to return in `list` mode.
+</ParamField>
+
+<ParamField path="force" type="boolean" default="false">
+  For `kill` mode: Force immediate termination instead of graceful shutdown.
+  
+  - `false`: Send terminate signal (allows cleanup)
+  - `true`: Force kill (immediate, no cleanup)
+</ParamField>
+
+## Return Values
+
+**List mode:**
+```
+Processes (20 shown):
+PID    Name              CPU%    Memory
+1234   chrome.exe        15.2%   512.3 MB
+5678   python.exe        8.1%    256.7 MB
+...
+```
+
+**Kill mode:**
+```
+Terminated: chrome.exe (PID 1234), chrome.exe (PID 5678)
+```
+
+Or:
+```
+Force killed: unresponsive.exe (PID 9999)
+```
+
+## Examples
+
+### List All Processes
+
+```python
+# Show top 20 by memory usage
+Process(mode="list")
+```
+
+### List with Filtering
+
+```python
+# Find all Chrome processes
+Process(
+    mode="list",
+    name="chrome"
+)
+
+# Show top CPU consumers
+Process(
+    mode="list",
+    sort_by="cpu",
+    limit=10
+)
+
+# List all Python processes
+Process(
+    mode="list",
+    name="python",
+    sort_by="name"
+)
+```
+
+### Terminate by Name
+
+```python
+# Gracefully close all Chrome instances
+Process(
+    mode="kill",
+    name="chrome"
+)
+```
+
+### Terminate by PID
+
+```python
+# Kill specific process
+Process(
+    mode="kill",
+    pid=1234
+)
+```
+
+### Force Kill
+
+```python
+# Force kill unresponsive application
+Process(
+    mode="kill",
+    name="unresponsive.exe",
+    force=True
+)
+```
+
+## Common Patterns
+
+### Find and Kill Resource Hogs
+
+```python
+# 1. Identify high-memory processes
+Process(
+    mode="list",
+    sort_by="memory",
+    limit=5
+)
+# Output shows: "badapp.exe" using 2.5 GB
+
+# 2. Terminate the offender
+Process(
+    mode="kill",
+    name="badapp"
+)
+```
+
+### Clean Up Multiple Instances
+
+```python
+# Close all instances of an app
+Process(
+    mode="kill",
+    name="notepad"
+)
+# Terminates all notepad.exe processes
+```
+
+### Monitoring CPU Usage
+
+```python
+# Check which apps are using CPU
+Process(
+    mode="list",
+    sort_by="cpu",
+    limit=10
+)
+```
+
+### Troubleshooting Slow System
+
+```python
+# 1. Check all processes
+Process(
+    mode="list",
+    limit=50
+)
+
+# 2. Find specific culprit
+Process(
+    mode="list",
+    name="suspicious_app"
+)
+
+# 3. Kill if confirmed
+Process(
+    mode="kill",
+    pid=identified_pid
+)
+```
+
+### Application Testing
+
+```python
+# Launch app
+App(mode="launch", name="testapp")
+Wait(duration=5)
+
+# Verify it's running
+Process(
+    mode="list",
+    name="testapp"
+)
+
+# Cleanup after test
+Process(
+    mode="kill",
+    name="testapp"
+)
+```
+
+### Automated Cleanup
+
+```python
+# Close all browser instances before test
+for browser in ["chrome", "edge", "firefox"]:
+    Process(mode="kill", name=browser)
+
+Wait(duration=2)
+
+# Launch fresh browser
+App(mode="launch", name="chrome")
+```
+
+## Process Name Matching
+
+**Fuzzy matching** with 60% similarity threshold:
+
+```python
+# All of these match "chrome.exe"
+Process(mode="list", name="chrome")
+Process(mode="list", name="Chrome")
+Process(mode="list", name="CHROME")
+Process(mode="list", name="chrom")  # Partial match
+
+# Won't match (< 60% similar)
+Process(mode="list", name="chr")
+```
+
+## Force vs Graceful Termination
+
+| Method | Termination | Cleanup | Use Case |
+|--------|-------------|---------|----------|
+| **Graceful** (`force=False`) | Sends terminate signal | Allows app to save state | Normal shutdown |
+| **Force** (`force=True`) | Immediate kill | No cleanup | Frozen/unresponsive apps |
+
+<Tip>
+  **Always try graceful first**, then use force if the process doesn't respond within 5-10 seconds.
+</Tip>
+
+## Sort Options
+
+### By Memory (default)
+```python
+Process(mode="list", sort_by="memory")
+# Highest memory usage first
+```
+
+### By CPU
+```python
+Process(mode="list", sort_by="cpu")
+# Highest CPU usage first
+```
+
+### By Name
+```python
+Process(mode="list", sort_by="name")
+# Alphabetical order
+```
+
+## Error Handling
+
+```python
+# No processes found
+"No processes found."
+"No processes found matching chrome."
+
+# Kill errors
+"No process with PID 1234 found."
+"Access denied to kill PID 5678. Try running as administrator."
+"No process matching \"fakeapp\" found or access denied."
+
+# Missing parameters
+"Error: Provide either pid or name parameter for kill mode."
+
+# Invalid mode
+"Error: mode must be either \"list\" or \"kill\"."
+```
+
+## Permissions
+
+<Warning>
+  **Administrator rights** may be required to:
+  - View all processes (especially system processes)
+  - Terminate processes owned by other users
+  - Kill system-critical processes
+</Warning>
+
+If "Access denied" occurs, re-run the MCP server as administrator.
+
+## Common Process Names
+
+| Process | Application |
+|---------|-------------|
+| `chrome.exe` | Google Chrome |
+| `msedge.exe` | Microsoft Edge |
+| `firefox.exe` | Mozilla Firefox |
+| `explorer.exe` | Windows Explorer |
+| `notepad.exe` | Notepad |
+| `code.exe` | VS Code |
+| `python.exe` | Python interpreter |
+| `node.exe` | Node.js |
+
+## Best Practices
+
+<Tip>
+  **List before killing** to verify the correct process and PID.
+</Tip>
+
+<Tip>
+  **Use PID for precision** when multiple instances exist and you need to kill a specific one.
+</Tip>
+
+<Warning>
+  **Never kill system processes** like `csrss.exe`, `winlogon.exe`, or `services.exe` - this will crash Windows.
+</Warning>
+
+<Tip>
+  **Set appropriate limits** - Large limits (100+) can slow down list operations.
+</Tip>
+
+## Performance
+
+- **List operation:** 200-500ms (depends on process count)
+- **Kill operation:** 10-100ms (graceful), instant (force)
+- **Filter/sort:** Negligible overhead
+
+## Use Cases
+
+### Development
+- Kill stuck development servers
+- Clean up test processes
+- Monitor resource usage during testing
+- Automate build cleanup
+
+### System Maintenance
+- Identify memory leaks
+- Track CPU-intensive apps
+- Clean up background processes
+- Troubleshoot performance issues
+
+### Automation
+- Ensure clean state before tests
+- Kill processes after operations
+- Monitor application lifecycle
+- Force-close hung applications
+
+## Limitations
+
+- Can't list processes from other sessions (requires admin)
+- No process tree view (parent/child relationships)
+- Can't adjust process priority
+- Can't suspend/resume processes
+- Limited to text output (no real-time monitoring)
+
+## Related Tools
+
+- [App](/tools/app) - Launch and switch between applications
+- [PowerShell](/tools/shell) - Advanced process management with `Get-Process` and `Stop-Process`
+- [Notification](/tools/notification) - Alert when processes are terminated

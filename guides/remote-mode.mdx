@@ -1,0 +1,504 @@
+---
+title: Remote Mode Setup
+description: Setting up and using remote mode with windowsmcp.io VMs
+---
+
+Windows-MCP supports remote mode, allowing you to control Windows machines through cloud-hosted VMs via [windowsmcp.io](https://windowsmcp.io). This enables Windows automation from any platform without requiring a local Windows installation.
+
+## Overview
+
+In remote mode, Windows-MCP acts as a **proxy client** that connects to the windowsmcp.io service. The architecture works as follows:
+
+```
+MCP Client (Claude, etc.) → Windows-MCP Proxy → windowsmcp.io → Windows VM
+```
+
+Your MCP client connects to Windows-MCP locally, which then proxies all tool calls to a remote Windows VM managed by windowsmcp.io.
+
+## Local vs Remote Mode
+
+<Tabs>
+  <Tab title="Local Mode">
+    **Local Mode** (default) runs Windows-MCP directly on your Windows machine:
+
+    - MCP server runs on your local Windows PC
+    - Direct access to your local desktop and applications
+    - No cloud service required
+    - Best for personal automation on your own machine
+    - No additional costs
+
+    ```bash
+    # Default local mode
+    uvx windows-mcp
+    ```
+  </Tab>
+  
+  <Tab title="Remote Mode">
+    **Remote Mode** connects to cloud-hosted Windows VMs:
+
+    - MCP server runs locally as a proxy
+    - Connects to remote Windows VM via windowsmcp.io
+    - Access Windows from non-Windows platforms (Mac, Linux)
+    - Scalable for multiple VMs
+    - Requires windowsmcp.io account and API key
+
+    ```bash
+    # Remote mode (requires environment variables)
+    MODE=remote SANDBOX_ID=your-id API_KEY=your-key uvx windows-mcp
+    ```
+  </Tab>
+</Tabs>
+
+## Getting Started with Remote Mode
+
+<Steps>
+  <Step title="Create a windowsmcp.io account">
+    Visit [windowsmcp.io](https://windowsmcp.io) and create an account to access cloud-hosted Windows VMs.
+  </Step>
+
+  <Step title="Obtain your credentials">
+    From the windowsmcp.io dashboard, you'll need:
+    - **SANDBOX_ID**: The unique identifier for your Windows VM
+    - **API_KEY**: Your authentication key for accessing the service
+  </Step>
+
+  <Step title="Configure your MCP client">
+    Add Windows-MCP to your MCP client configuration with the required environment variables.
+  </Step>
+</Steps>
+
+## Configuration
+
+### Required Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `MODE` | Set to `remote` to enable remote mode | Yes |
+| `SANDBOX_ID` | Your VM identifier from windowsmcp.io dashboard | Yes |
+| `API_KEY` | Your API key for authentication | Yes |
+
+### Claude Desktop Configuration
+
+Add this to your `claude_desktop_config.json`:
+
+<CodeGroup>
+```json PyPI
+{
+  "mcpServers": {
+    "windows-mcp": {
+      "command": "uvx",
+      "args": [
+        "windows-mcp"
+      ],
+      "env": {
+        "MODE": "remote",
+        "SANDBOX_ID": "your-sandbox-id",
+        "API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+```json Source
+{
+  "mcpServers": {
+    "windows-mcp": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "<path-to-windows-mcp>",
+        "run",
+        "windows-mcp"
+      ],
+      "env": {
+        "MODE": "remote",
+        "SANDBOX_ID": "your-sandbox-id",
+        "API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+</CodeGroup>
+
+<Warning>
+Replace `your-sandbox-id` and `your-api-key` with your actual credentials from the windowsmcp.io dashboard. Never commit these credentials to version control.
+</Warning>
+
+### Perplexity Desktop Configuration
+
+In Perplexity Desktop (Settings → Connectors → Add Connector → Advanced):
+
+<CodeGroup>
+```json PyPI
+{
+  "command": "uvx",
+  "args": [
+    "windows-mcp"
+  ],
+  "env": {
+    "MODE": "remote",
+    "SANDBOX_ID": "your-sandbox-id",
+    "API_KEY": "your-api-key"
+  }
+}
+```
+
+```json Source
+{
+  "command": "uv",
+  "args": [
+    "--directory",
+    "<path-to-windows-mcp>",
+    "run",
+    "windows-mcp"
+  ],
+  "env": {
+    "MODE": "remote",
+    "SANDBOX_ID": "your-sandbox-id",
+    "API_KEY": "your-api-key"
+  }
+}
+```
+</CodeGroup>
+
+### Gemini CLI Configuration
+
+In `%USERPROFILE%/.gemini/settings.json`:
+
+```json
+{
+  "theme": "Default",
+  "mcpServers": {
+    "windows-mcp": {
+      "command": "uvx",
+      "args": ["windows-mcp"],
+      "env": {
+        "MODE": "remote",
+        "SANDBOX_ID": "your-sandbox-id",
+        "API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+### Qwen Code Configuration
+
+In `%USERPROFILE%/.qwen/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "windows-mcp": {
+      "command": "uvx",
+      "args": ["windows-mcp"],
+      "env": {
+        "MODE": "remote",
+        "SANDBOX_ID": "your-sandbox-id",
+        "API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+### Codex CLI Configuration
+
+In `%USERPROFILE%/.codex/config.toml`:
+
+```toml
+[mcp_servers.windows-mcp]
+command="uvx"
+args=["windows-mcp"]
+
+[mcp_servers.windows-mcp.env]
+MODE="remote"
+SANDBOX_ID="your-sandbox-id"
+API_KEY="your-api-key"
+```
+
+## Transport Options
+
+Both local and remote modes support multiple transport layers:
+
+| Transport | Flag | Use Case |
+|-----------|------|----------|
+| `stdio` (default) | `--transport stdio` | Direct connection from MCP clients |
+| `sse` | `--transport sse --host HOST --port PORT` | Network-accessible via Server-Sent Events |
+| `streamable-http` | `--transport streamable-http --host HOST --port PORT` | Network-accessible via HTTP streaming (recommended for production) |
+
+### Examples
+
+<Tabs>
+  <Tab title="Local with stdio (default)">
+    ```bash
+    uvx windows-mcp
+    # Equivalent to:
+    uvx windows-mcp --transport stdio
+    ```
+  </Tab>
+  
+  <Tab title="Local with SSE">
+    ```bash
+    uvx windows-mcp --transport sse --host localhost --port 8000
+    ```
+  </Tab>
+  
+  <Tab title="Local with HTTP">
+    ```bash
+    uvx windows-mcp --transport streamable-http --host localhost --port 8000
+    ```
+  </Tab>
+  
+  <Tab title="Remote with stdio">
+    ```bash
+    MODE=remote SANDBOX_ID=your-id API_KEY=your-key uvx windows-mcp
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+In remote mode, the proxy client still uses the specified transport to communicate with your local MCP client. The proxy-to-VM communication uses Streamable HTTP internally via the windowsmcp.io service.
+</Note>
+
+## Using Remote Mode
+
+Once configured, remote mode is transparent to your workflow. All Windows-MCP tools work exactly the same way:
+
+```json
+// Take a snapshot of the remote Windows VM
+{
+  "tool": "Snapshot",
+  "arguments": {
+    "use_vision": true
+  }
+}
+
+// Launch an application on the remote VM
+{
+  "tool": "App",
+  "arguments": {
+    "mode": "launch",
+    "name": "Notepad"
+  }
+}
+
+// Type into the remote desktop
+{
+  "tool": "Type",
+  "arguments": {
+    "label": 42,
+    "text": "Hello from remote mode!"
+  }
+}
+```
+
+## Remote Mode Authentication
+
+When you start Windows-MCP in remote mode, it:
+
+1. Reads the `MODE`, `SANDBOX_ID`, and `API_KEY` environment variables
+2. Authenticates with windowsmcp.io using your API key
+3. Establishes a connection to your specified sandbox/VM
+4. Creates a proxy that forwards all tool calls to the remote VM
+
+<Warning>
+**Missing Credentials Error**: If you see "SANDBOX_ID is required" or "API_KEY is required", ensure the environment variables are correctly set in your MCP client configuration.
+</Warning>
+
+## Use Cases for Remote Mode
+
+<CardGroup cols={2}>
+  <Card title="Cross-Platform Development" icon="laptop-code">
+    Develop and test Windows applications from Mac or Linux without dual-booting or VMs on your local machine.
+  </Card>
+  
+  <Card title="Scalable Automation" icon="server">
+    Run multiple Windows automation tasks in parallel across different VMs without hardware constraints.
+  </Card>
+  
+  <Card title="Cloud-Based Testing" icon="vial">
+    Execute Windows QA tests in the cloud as part of CI/CD pipelines.
+  </Card>
+  
+  <Card title="Remote Access" icon="globe">
+    Access and control Windows machines from anywhere, without VPN or Remote Desktop setup.
+  </Card>
+</CardGroup>
+
+## Limitations and Considerations
+
+<AccordionGroup>
+  <Accordion title="Network Latency">
+    Remote mode adds network latency compared to local mode. Expect slightly longer response times for tool calls, especially for operations that return large amounts of data (screenshots, file contents).
+  </Accordion>
+
+  <Accordion title="Bandwidth Usage">
+    Screenshots and vision-enabled snapshots can consume significant bandwidth. Consider using `use_vision=false` when screenshots aren't necessary.
+  </Accordion>
+
+  <Accordion title="VM State Persistence">
+    Check the windowsmcp.io documentation for details on VM state persistence, snapshot capabilities, and session duration limits.
+  </Accordion>
+
+  <Accordion title="Concurrent Connections">
+    Each sandbox/VM typically supports one active connection at a time. Attempting multiple simultaneous connections may result in authentication errors.
+  </Accordion>
+
+  <Accordion title="Pricing and Quotas">
+    Remote mode usage is subject to windowsmcp.io pricing and quota limits. Monitor your usage through the dashboard to avoid unexpected charges.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting Remote Mode
+
+### Authentication Failed
+
+**Problem**: "API_KEY is required" or authentication errors
+
+**Solutions**:
+- Verify your API key is correct in the configuration
+- Check that the API key hasn't expired
+- Ensure the `MODE` is set to `"remote"` (lowercase)
+- Restart your MCP client after changing configuration
+
+### Connection Timeout
+
+**Problem**: Timeout errors when connecting to windowsmcp.io
+
+**Solutions**:
+- Check your internet connection
+- Verify the windowsmcp.io service status
+- Try increasing timeout settings if configurable
+- Check for firewall or proxy issues blocking connections
+
+### Sandbox Not Found
+
+**Problem**: "SANDBOX_ID is required" or sandbox not found
+
+**Solutions**:
+- Verify the SANDBOX_ID in your windowsmcp.io dashboard
+- Ensure the VM/sandbox is running (not stopped or terminated)
+- Check that your account has access to the specified sandbox
+
+### Tools Not Working
+
+**Problem**: Tools fail or return unexpected results in remote mode
+
+**Solutions**:
+- Take a snapshot to verify the remote desktop state
+- Ensure the Windows VM has fully booted and is responsive
+- Check VM logs in the windowsmcp.io dashboard
+- Verify the VM has necessary applications installed
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Start with snapshots">
+    When connecting to a remote VM, always start with a `Snapshot` call to verify connectivity and understand the current desktop state.
+  </Accordion>
+
+  <Accordion title="Minimize vision calls">
+    Use `use_vision=false` for routine snapshots to reduce bandwidth and latency. Only enable vision when you need to visually verify the state.
+  </Accordion>
+
+  <Accordion title="Handle connection interruptions">
+    Implement retry logic for critical operations, as network issues can cause temporary connection failures.
+  </Accordion>
+
+  <Accordion title="Monitor usage">
+    Regularly check your windowsmcp.io dashboard to monitor VM usage, costs, and quota consumption.
+  </Accordion>
+
+  <Accordion title="Clean up sessions">
+    Properly close MCP client connections when done to release VM resources and avoid unnecessary charges.
+  </Accordion>
+
+  <Accordion title="Secure credentials">
+    Never hardcode API keys in scripts. Use environment variables or secure secret management systems.
+  </Accordion>
+</AccordionGroup>
+
+## Switching Between Local and Remote
+
+You can easily switch between local and remote mode by changing the configuration:
+
+<Tabs>
+  <Tab title="Switch to Local">
+    Remove or comment out the `env` section:
+
+    ```json
+    {
+      "mcpServers": {
+        "windows-mcp": {
+          "command": "uvx",
+          "args": ["windows-mcp"]
+        }
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Switch to Remote">
+    Add the `env` section with remote credentials:
+
+    ```json
+    {
+      "mcpServers": {
+        "windows-mcp": {
+          "command": "uvx",
+          "args": ["windows-mcp"],
+          "env": {
+            "MODE": "remote",
+            "SANDBOX_ID": "your-sandbox-id",
+            "API_KEY": "your-api-key"
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Multiple Configurations">
+    Configure both as separate MCP servers:
+
+    ```json
+    {
+      "mcpServers": {
+        "windows-mcp-local": {
+          "command": "uvx",
+          "args": ["windows-mcp"]
+        },
+        "windows-mcp-remote": {
+          "command": "uvx",
+          "args": ["windows-mcp"],
+          "env": {
+            "MODE": "remote",
+            "SANDBOX_ID": "your-sandbox-id",
+            "API_KEY": "your-api-key"
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="windowsmcp.io" icon="cloud" href="https://windowsmcp.io">
+    Official website for remote Windows VM hosting
+  </Card>
+  <Card title="Client Setup" icon="gear" href="/guides/client-setup">
+    Configure Windows-MCP with different MCP clients
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Common issues and solutions
+  </Card>
+  <Card title="Security" icon="shield" href="https://github.com/CursorTouch/Windows-MCP/blob/main/SECURITY.md">
+    Security considerations and best practices
+  </Card>
+</CardGroup>

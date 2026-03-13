@@ -1,0 +1,170 @@
+---
+title: Tools Overview
+description: Complete overview of all 15 Windows-MCP automation tools
+---
+
+Windows-MCP provides 15 powerful tools for Windows desktop automation. Each tool is designed for specific tasks ranging from UI interaction to system management.
+
+## Core Interaction Tools
+
+These tools enable direct interaction with the Windows UI:
+
+<CardGroup cols={2}>
+  <Card title="Snapshot" icon="camera" href="/tools/snapshot">
+    Capture complete desktop state including windows, interactive elements, and screenshots
+  </Card>
+  
+  <Card title="Click" icon="hand-pointer" href="/tools/click">
+    Perform mouse clicks at coordinates or on UI elements
+  </Card>
+  
+  <Card title="Type" icon="keyboard" href="/tools/type">
+    Enter text into input fields with advanced caret control
+  </Card>
+  
+  <Card title="Scroll" icon="arrows-up-down" href="/tools/scroll">
+    Scroll vertically or horizontally in any scrollable area
+  </Card>
+  
+  <Card title="Move" icon="up-right-and-down-left-from-center" href="/tools/move">
+    Move mouse cursor or perform drag-and-drop operations
+  </Card>
+  
+  <Card title="Shortcut" icon="keyboard" href="/tools/shortcut">
+    Execute keyboard shortcuts and key combinations
+  </Card>
+</CardGroup>
+
+## Application & System Management
+
+Tools for managing applications and system resources:
+
+<CardGroup cols={2}>
+  <Card title="App" icon="window-restore" href="/tools/app">
+    Launch, resize, and switch between Windows applications
+  </Card>
+  
+  <Card title="PowerShell" icon="terminal" href="/tools/shell">
+    Execute PowerShell commands with full system access
+  </Card>
+  
+  <Card title="Process" icon="list-check" href="/tools/process">
+    List and manage running processes
+  </Card>
+  
+  <Card title="Clipboard" icon="clipboard" href="/tools/clipboard">
+    Read and write Windows clipboard content
+  </Card>
+</CardGroup>
+
+## Advanced Tools
+
+Specialized tools for complex automation scenarios:
+
+<CardGroup cols={2}>
+  <Card title="MultiSelect" icon="hand-pointer" href="/tools/multiselect">
+    Select multiple items or perform batch clicks
+  </Card>
+  
+  <Card title="MultiEdit" icon="keyboard" href="/tools/multiedit">
+    Fill multiple input fields in one operation
+  </Card>
+  
+  <Card title="Scrape" icon="globe" href="/tools/scrape">
+    Extract content from web pages
+  </Card>
+  
+  <Card title="Notification" icon="bell" href="/tools/notification">
+    Send Windows toast notifications
+  </Card>
+  
+  <Card title="Registry" icon="database" href="/tools/registry">
+    Read and write Windows Registry values
+  </Card>
+</CardGroup>
+
+## Workflow Essentials
+
+<Card title="Wait" icon="clock" href="/tools/wait">
+  Pause execution to wait for UI elements to load
+</Card>
+
+## Tool Selection Guide
+
+### For UI Automation
+1. Always start with **Snapshot** to understand the current state
+2. Use **Click**, **Type**, and **Scroll** for basic interactions
+3. Use **Move** for hover effects or drag-and-drop
+4. Use **Shortcut** for quick system commands
+
+### For Batch Operations
+- **MultiSelect**: Select multiple files, checkboxes, or items
+- **MultiEdit**: Fill forms with multiple input fields
+
+### For Application Control
+- **App**: Launch and manage windows
+- **Process**: Monitor and terminate processes
+- **PowerShell**: Execute complex system commands
+
+### For Data Extraction
+- **Scrape**: Get web page content (HTTP or DOM-based)
+- **Clipboard**: Transfer data between applications
+- **Snapshot**: Extract UI element information
+
+<Note>
+**Best Practice**: Always call Snapshot before performing UI interactions to get current element coordinates and labels.
+</Note>
+
+## Common Patterns
+
+### Basic Workflow
+```python
+# 1. Capture current state
+snapshot = Snapshot(use_vision=True)
+
+# 2. Interact with UI
+Click(label=5)  # Click element with label 5
+Type(text="Hello World", label=10)  # Type in element 10
+
+# 3. Submit and wait
+Shortcut("ctrl+enter")
+Wait(duration=2)
+```
+
+### Form Filling
+```python
+# Efficient multi-field form filling
+MultiEdit(labels=[
+  [5, "John Doe"],
+  [6, "john@example.com"],
+  [7, "555-1234"]
+])
+```
+
+### File Management
+```python
+# Launch file explorer and select multiple files
+App(mode="launch", name="explorer")
+Wait(duration=1)
+Snapshot(use_vision=True)
+MultiSelect(labels=[10, 11, 12], press_ctrl=True)
+```
+
+## Coordinate System
+
+All tools use **virtual desktop coordinates** which span across all monitors. The coordinate space:
+- Origin (0,0) is at the top-left of the primary monitor
+- Multi-monitor setups use a unified coordinate system
+- Snapshot provides the current coordinate space dimensions
+
+## Error Handling
+
+All tools return descriptive error messages:
+- Invalid coordinates or labels
+- Missing required parameters
+- State errors (e.g., calling Click with label before Snapshot)
+- System-level failures
+
+<Warning>
+Windows-MCP has **full system access** with no sandboxing. Tools like PowerShell and App can perform irreversible operations. Use with caution.
+</Warning>

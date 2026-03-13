@@ -1,0 +1,501 @@
+---
+title: FileSystem Module
+description: Structured file and directory operations
+---
+
+## Overview
+
+The FileSystem module (`filesystem/`) provides safe, structured file system operations as an alternative to raw PowerShell commands. It includes path validation, size limits, and clear error messages.
+
+## Architecture
+
+The module consists of two files:
+
+- **service.py**: Core file operation functions
+- **views.py**: Data models and formatting utilities
+
+## Core Functions
+
+### read_file()
+
+Read text file contents with optional pagination.
+
+```python
+def read_file(
+    path: str,
+    offset: int | None = None,
+    limit: int | None = None,
+    encoding: str = 'utf-8'
+) -> str
+```
+
+<ParamField path="path" type="string" required>
+  File path (absolute or relative to Desktop)
+</ParamField>
+
+<ParamField path="offset" type="int">
+  Starting line number (1-based, inclusive)
+</ParamField>
+
+<ParamField path="limit" type="int">
+  Number of lines to read
+</ParamField>
+
+<ParamField path="encoding" type="string" default="utf-8">
+  Text encoding
+</ParamField>
+
+<ResponseField name="content" type="string">
+  File contents or error message
+</ResponseField>
+
+**Limits:**
+- Max file size: 10 MB (10,485,760 bytes)
+- Use offset/limit for larger files
+
+### write_file()
+
+Write or append text to file.
+
+```python
+def write_file(
+    path: str,
+    content: str,
+    append: bool = False,
+    encoding: str = 'utf-8',
+    create_parents: bool = True
+) -> str
+```
+
+<ParamField path="path" type="string" required>
+  Destination file path
+</ParamField>
+
+<ParamField path="content" type="string" required>
+  Text content to write
+</ParamField>
+
+<ParamField path="append" type="bool" default={false}>
+  Append to existing file instead of overwriting
+</ParamField>
+
+<ParamField path="create_parents" type="bool" default={true}>
+  Create parent directories if they don't exist
+</ParamField>
+
+### copy_path()
+
+Copy file or directory.
+
+```python
+def copy_path(
+    source: str,
+    destination: str,
+    overwrite: bool = False
+) -> str
+```
+
+<ParamField path="source" type="string" required>
+  Source path
+</ParamField>
+
+<ParamField path="destination" type="string" required>
+  Destination path
+</ParamField>
+
+<ParamField path="overwrite" type="bool" default={false}>
+  Replace existing destination
+</ParamField>
+
+### move_path()
+
+Move or rename file or directory.
+
+```python
+def move_path(
+    source: str,
+    destination: str,
+    overwrite: bool = False
+) -> str
+```
+
+Parameters same as `copy_path()`.
+
+### delete_path()
+
+Delete file or directory.
+
+```python
+def delete_path(
+    path: str,
+    recursive: bool = False
+) -> str
+```
+
+<ParamField path="path" type="string" required>
+  Path to delete
+</ParamField>
+
+<ParamField path="recursive" type="bool" default={false}>
+  Delete non-empty directories (required for directories with contents)
+</ParamField>
+
+### list_directory()
+
+List directory contents.
+
+```python
+def list_directory(
+    path: str,
+    pattern: str | None = None,
+    recursive: bool = False,
+    show_hidden: bool = False
+) -> str
+```
+
+<ParamField path="path" type="string" required>
+  Directory path
+</ParamField>
+
+<ParamField path="pattern" type="string">
+  Filename pattern (e.g., `"*.txt"`, `"test_*"`)
+</ParamField>
+
+<ParamField path="recursive" type="bool" default={false}>
+  List subdirectories recursively
+</ParamField>
+
+<ParamField path="show_hidden" type="bool" default={false}>
+  Include hidden files (names starting with `.`)
+</ParamField>
+
+**Limits:**
+- Max results: 500 items (truncates with message if exceeded)
+
+### search_files()
+
+Search for files matching glob pattern.
+
+```python
+def search_files(
+    path: str,
+    pattern: str,
+    recursive: bool = True
+) -> str
+```
+
+<ParamField path="path" type="string" required>
+  Search root directory
+</ParamField>
+
+<ParamField path="pattern" type="string" required>
+  Glob pattern (e.g., `"**/*.py"`, `"test_*.json"`)
+</ParamField>
+
+<ParamField path="recursive" type="bool" default={true}>
+  Search subdirectories
+</ParamField>
+
+### get_file_info()
+
+Get file or directory metadata.
+
+```python
+def get_file_info(path: str) -> str
+```
+
+<ResponseField name="info" type="string">
+  Formatted metadata including:
+  - Path (absolute)
+  - Type (File, Directory, Symlink)
+  - Size (human-readable + bytes)
+  - Created, Modified, Accessed timestamps
+  - Read-only flag
+  - Extension (files only)
+  - Contents count (directories only)
+  - Link target (symlinks only)
+</ResponseField>
+
+## Data Models
+
+### File
+
+Detailed file or directory metadata.
+
+```python
+@dataclass
+class File:
+    path: str
+    type: str
+    size: int
+    created: datetime
+    modified: datetime
+    accessed: datetime
+    read_only: bool
+    extension: Optional[str] = None
+    link_target: Optional[str] = None
+    contents_files: Optional[int] = None
+    contents_dirs: Optional[int] = None
+```
+
+### Directory
+
+Directory entry for listings.
+
+```python
+@dataclass
+class Directory:
+    name: str
+    is_dir: bool
+    size: int = 0
+```
+
+### format_size()
+
+Format bytes as human-readable string.
+
+```python
+def format_size(size_bytes: int) -> str
+```
+
+**Examples:**
+- `512` → `"512 B"`
+- `1536` → `"1.5 KB"`
+- `2097152` → `"2.0 MB"`
+- `3221225472` → `"3.0 GB"`
+
+## Constants
+
+```python
+MAX_READ_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_RESULTS = 500                  # Max items in list/search
+```
+
+## Usage Examples
+
+### Read File
+
+```python
+from windows_mcp import filesystem
+
+# Read entire file
+content = filesystem.read_file("C:/Users/John/Documents/notes.txt")
+
+# Read lines 10-20
+content = filesystem.read_file(
+    "large_file.log",
+    offset=10,
+    limit=10
+)
+
+# Try different encoding
+content = filesystem.read_file(
+    "legacy.txt",
+    encoding='latin-1'
+)
+```
+
+### Write File
+
+```python
+from windows_mcp import filesystem
+
+# Write new file
+filesystem.write_file(
+    "output.txt",
+    "Hello World\n"
+)
+
+# Append to file
+filesystem.write_file(
+    "log.txt",
+    "New entry\n",
+    append=True
+)
+
+# Write with parent creation
+filesystem.write_file(
+    "nested/path/file.txt",
+    "content",
+    create_parents=True
+)
+```
+
+### Copy and Move
+
+```python
+from windows_mcp import filesystem
+
+# Copy file
+filesystem.copy_path(
+    "source.txt",
+    "backup.txt"
+)
+
+# Copy directory
+filesystem.copy_path(
+    "my_project",
+    "my_project_backup",
+    overwrite=True
+)
+
+# Rename file
+filesystem.move_path(
+    "old_name.txt",
+    "new_name.txt"
+)
+```
+
+### Delete
+
+```python
+from windows_mcp import filesystem
+
+# Delete file
+filesystem.delete_path("temp.txt")
+
+# Delete empty directory
+filesystem.delete_path("empty_dir")
+
+# Delete directory with contents
+filesystem.delete_path(
+    "project_backup",
+    recursive=True
+)
+```
+
+### List Directory
+
+```python
+from windows_mcp import filesystem
+
+# List current directory
+filesystem.list_directory(".")
+
+# List with filter
+filesystem.list_directory(
+    "C:/Projects",
+    pattern="*.py"
+)
+
+# Recursive listing
+filesystem.list_directory(
+    ".",
+    recursive=True,
+    show_hidden=True
+)
+```
+
+### Search Files
+
+```python
+from windows_mcp import filesystem
+
+# Find all Python files
+filesystem.search_files(
+    "C:/Projects",
+    "**/*.py"
+)
+
+# Find test files
+filesystem.search_files(
+    ".",
+    "test_*.py",
+    recursive=False
+)
+```
+
+### Get Info
+
+```python
+from windows_mcp import filesystem
+
+# File info
+info = filesystem.get_file_info("document.pdf")
+# Output:
+# Path: C:\Users\John\Desktop\document.pdf
+# Type: File
+# Size: 2.3 MB (2,415,919 bytes)
+# Created: 2024-01-15 10:30:45
+# Modified: 2024-01-20 14:22:10
+# ...
+
+# Directory info
+info = filesystem.get_file_info("my_folder")
+# Output includes contents count
+```
+
+### Integration with FileSystem Tool
+
+From `__main__.py` showing MCP tool usage:
+
+```python
+@mcp.tool(name='FileSystem')
+def file_system_tool(
+    mode: Literal['read', 'write', 'copy', 'move', 'delete', 'list', 'search', 'info'],
+    path: str,
+    destination: str | None = None,
+    content: str | None = None,
+    pattern: str | None = None,
+    recursive: bool | str = False,
+    append: bool | str = False,
+    overwrite: bool | str = False,
+    offset: int | None = None,
+    limit: int | None = None,
+    encoding: str = 'utf-8',
+    show_hidden: bool | str = False,
+) -> str:
+    # Resolve relative paths to Desktop
+    from platformdirs import user_desktop_dir
+    default_dir = user_desktop_dir()
+    if not os.path.isabs(path):
+        path = os.path.join(default_dir, path)
+    
+    match mode:
+        case 'read':
+            return filesystem.read_file(path, offset, limit, encoding)
+        case 'write':
+            return filesystem.write_file(path, content, append, encoding)
+        # ... other modes
+```
+
+## Error Handling
+
+All functions return user-friendly error strings:
+
+```python
+# File not found
+"Error: File not found: C:\\path\\to\\file.txt"
+
+# Permission denied
+"Error: Permission denied: C:\\Windows\\System32\\file.dll"
+
+# File too large
+"Error: File too large (15,728,640 bytes). Maximum is 10,485,760 bytes."
+
+# Directory not empty
+"Error: Directory is not empty: C:\\temp. Set recursive=True to delete."
+
+# Destination exists
+"Error: Destination already exists: backup.txt. Set overwrite=True to replace."
+```
+
+## Path Resolution
+
+Relative paths are resolved to the user's Desktop folder:
+
+```python
+# Relative path
+filesystem.read_file("notes.txt")
+# Resolves to: C:\Users\<user>\Desktop\notes.txt
+
+# Absolute path (unchanged)
+filesystem.read_file("C:\\Projects\\readme.md")
+# Uses: C:\Projects\readme.md
+```
+
+## Source Location
+
+- **Implementation**: `src/windows_mcp/filesystem/service.py` (filesystem/service.py:25)
+- **Data Models**: `src/windows_mcp/filesystem/views.py` (filesystem/views.py:15)
+- **MCP Tool**: `src/windows_mcp/__main__.py` (__main__.py:120)

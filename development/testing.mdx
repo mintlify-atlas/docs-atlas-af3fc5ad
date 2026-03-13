@@ -1,0 +1,516 @@
+---
+title: 'Testing'
+description: 'How to run tests and write test cases for Windows-MCP'
+icon: 'flask-vial'
+---
+
+Windows-MCP uses pytest for testing. The test suite covers unit tests, integration tests, and view/model tests.
+
+## Running Tests
+
+<CodeGroup>
+```bash All Tests
+pytest
+```
+
+```bash Specific Test File
+pytest tests/test_desktop_views.py
+```
+
+```bash Specific Test Class
+pytest tests/test_desktop_views.py::TestBrowser
+```
+
+```bash Specific Test Method
+pytest tests/test_desktop_views.py::TestBrowser::test_has_process_chrome
+```
+
+```bash With Coverage
+pytest --cov=src tests/
+```
+
+```bash Verbose Output
+pytest -v
+```
+
+```bash Show Print Statements
+pytest -s
+```
+</CodeGroup>
+
+## Test Structure
+
+Tests are organized in the `tests/` directory matching the module structure:
+
+```
+tests/
+├── __init__.py
+├── conftest.py                    # Shared fixtures
+├── test_analytics.py              # Analytics decorator tests
+├── test_desktop_views.py          # Desktop data models
+├── test_tree_views.py             # Tree data models
+├── test_tree_service.py           # Tree service logic
+├── test_auth_service.py           # Authentication service
+├── test_filesystem_service.py     # File system operations
+└── test_snapshot_display_filter.py # Snapshot filtering
+```
+
+## Test Configuration
+
+Test configuration is defined in `pyproject.toml`:
+
+```toml
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+```
+
+**Key settings:**
+- `testpaths`: Where pytest looks for tests
+- `asyncio_mode = "auto"`: Automatically handles async tests
+
+## Test Fixtures
+
+Shared fixtures are defined in `tests/conftest.py`:
+
+```python
+import pytest
+from windows_mcp.tree.views import BoundingBox, Center, TreeElementNode
+from windows_mcp.desktop.views import Window, Status
+
+@pytest.fixture
+def sample_bounding_box():
+    return BoundingBox(left=100, top=50, right=300, bottom=150, width=200, height=100)
+
+@pytest.fixture
+def sample_center():
+    return Center(x=200, y=100)
+
+@pytest.fixture
+def sample_tree_element_node(sample_bounding_box, sample_center):
+    return TreeElementNode(
+        bounding_box=sample_bounding_box,
+        center=sample_center,
+        name="OK",
+        control_type="Button",
+        window_name="Notepad",
+        metadata={
+            "value": "",
+            "shortcut": "Alt+O",
+            "has_focused": True,
+        },
+    )
+
+@pytest.fixture
+def sample_window(sample_bounding_box):
+    return Window(
+        name="Untitled - Notepad",
+        is_browser=False,
+        depth=0,
+        status=Status.NORMAL,
+        bounding_box=sample_bounding_box,
+        handle=12345,
+        process_id=6789,
+    )
+```
+
+## Testing Patterns
+
+### Unit Tests for Data Models
+
+Test data models and their methods:
+
+```python
+from windows_mcp.desktop.views import Browser, Status, Size
+
+class TestBrowser:
+    def test_has_process_chrome(self):
+        assert Browser.has_process("chrome.exe") is True
+
+    def test_has_process_edge(self):
+        assert Browser.has_process("msedge.exe") is True
+
+    def test_has_process_firefox(self):
+        assert Browser.has_process("firefox.exe") is True
+
+    def test_has_process_case_insensitive(self):
+        assert Browser.has_process("Chrome.EXE") is True
+        assert Browser.has_process("MSEDGE.EXE") is True
+
+    def test_has_process_unknown(self):
+        assert Browser.has_process("notepad.exe") is False
+
+class TestStatus:
+    def test_enum_values(self):
+        assert Status.MAXIMIZED.value == "Maximized"
+        assert Status.MINIMIZED.value == "Minimized"
+        assert Status.NORMAL.value == "Normal"
+        assert Status.HIDDEN.value == "Hidden"
+
+class TestSize:
+    def test_to_string_standard(self):
+        s = Size(width=1920, height=1080)
+        assert s.to_string() == "(1920,1080)"
+
+    def test_to_string_zero(self):
+        s = Size(width=0, height=0)
+        assert s.to_string() == "(0,0)"
+```
+
+### Async Tests with Mocks
+
+Test async functions with mocked dependencies:
+
+```python
+import asyncio
+from unittest.mock import AsyncMock
+import pytest
+from windows_mcp.analytics import with_analytics
+
+class TestWithAnalytics:
+    async def test_success_path(self):
+        mock_analytics = AsyncMock()
+
+        @with_analytics(mock_analytics, "test_tool")
+        async def my_tool():
+            return "result"
+
+        result = await my_tool()
+        assert result == "result"
+        mock_analytics.track_tool.assert_called_once()
+        call_args = mock_analytics.track_tool.call_args
+        assert call_args[0][0] == "test_tool"
+        assert call_args[0][1]["success"] is True
+        assert "duration_ms" in call_args[0][1]
+
+    async def test_error_path(self):
+        mock_analytics = AsyncMock()
+
+        @with_analytics(mock_analytics, "test_tool")
+        async def failing_tool():
+            raise ValueError("something broke")
+
+        with pytest.raises(ValueError, match="something broke"):
+            await failing_tool()
+        mock_analytics.track_error.assert_called_once()
+```
+
+### Service Tests with Mocks
+
+Test service logic with mocked dependencies:
+
+```python
+from unittest.mock import MagicMock
+import pytest
+from windows_mcp.desktop.views import Size
+from windows_mcp.tree.service import Tree
+from windows_mcp.uia import Rect
+
+@pytest.fixture
+def tree_instance():
+    mock_desktop = MagicMock()
+    mock_desktop.get_screen_size.return_value = Size(width=1920, height=1080)
+    return Tree(mock_desktop)
+
+class TestAppNameCorrection:
+    def test_progman(self, tree_instance):
+        assert tree_instance.app_name_correction("Progman") == "Desktop"
+
+    def test_shell_traywnd(self, tree_instance):
+        assert tree_instance.app_name_correction("Shell_TrayWnd") == "Taskbar"
+
+    def test_passthrough(self, tree_instance):
+        assert tree_instance.app_name_correction("Notepad") == "Notepad"
+
+class TestIouBoundingBox:
+    def test_full_overlap(self, tree_instance):
+        window = Rect(0, 0, 500, 500)
+        element = Rect(100, 100, 200, 200)
+        result = tree_instance.iou_bounding_box(window, element)
+        assert result.left == 100
+        assert result.top == 100
+        assert result.right == 200
+        assert result.bottom == 200
+        assert result.width == 100
+        assert result.height == 100
+
+    def test_no_overlap(self, tree_instance):
+        window = Rect(0, 0, 50, 50)
+        element = Rect(100, 100, 200, 200)
+        result = tree_instance.iou_bounding_box(window, element)
+        assert result.width == 0
+        assert result.height == 0
+```
+
+### Parameterized Tests
+
+Test multiple scenarios with the same test logic:
+
+```python
+import pytest
+
+@pytest.mark.parametrize("process_name,expected", [
+    ("chrome.exe", True),
+    ("msedge.exe", True),
+    ("firefox.exe", True),
+    ("Chrome.EXE", True),
+    ("notepad.exe", False),
+    ("", False),
+])
+def test_browser_detection(process_name, expected):
+    from windows_mcp.desktop.views import Browser
+    assert Browser.has_process(process_name) == expected
+```
+
+### Testing Exceptions
+
+Test that functions raise expected exceptions:
+
+```python
+import pytest
+
+def test_click_tool_validates_coordinates():
+    """Test that click_tool raises ValueError for invalid coordinates."""
+    from windows_mcp.desktop.service import Desktop
+    
+    with pytest.raises(ValueError, match="exactly 2 integers"):
+        Desktop().validate_coordinates([100])  # Missing y coordinate
+```
+
+## Mocking Strategies
+
+### Mocking Windows API
+
+Use `unittest.mock` to mock COM objects:
+
+```python
+from unittest.mock import MagicMock, patch
+
+@patch('windows_mcp.uia.core.UIAutomation')
+def test_get_element(mock_uia):
+    mock_element = MagicMock()
+    mock_uia.return_value.GetRootElement.return_value = mock_element
+    
+    # Test implementation
+    pass
+```
+
+### Mocking Async Functions
+
+Use `AsyncMock` for async dependencies:
+
+```python
+from unittest.mock import AsyncMock
+
+async def test_async_function():
+    mock_service = AsyncMock()
+    mock_service.get_data.return_value = {"key": "value"}
+    
+    result = await mock_service.get_data()
+    assert result == {"key": "value"}
+```
+
+### Mocking File System
+
+Mock file operations:
+
+```python
+from unittest.mock import mock_open, patch
+
+@patch('builtins.open', mock_open(read_data='test data'))
+def test_read_file():
+    with open('file.txt') as f:
+        content = f.read()
+    assert content == 'test data'
+```
+
+## Adding New Tests
+
+<Steps>
+  <Step title="Create Test File">
+    Create a test file in `tests/` matching the module structure:
+    ```bash
+    # For src/windows_mcp/desktop/service.py
+    touch tests/test_desktop_service.py
+    ```
+  </Step>
+
+  <Step title="Import Dependencies">
+    ```python
+    import pytest
+    from unittest.mock import MagicMock, AsyncMock
+    from windows_mcp.desktop.service import Desktop
+    ```
+  </Step>
+
+  <Step title="Write Test Class">
+    ```python
+    class TestDesktop:
+        def test_feature(self):
+            # Test implementation
+            pass
+    ```
+  </Step>
+
+  <Step title="Run Tests">
+    ```bash
+    pytest tests/test_desktop_service.py
+    ```
+  </Step>
+</Steps>
+
+## Test Coverage
+
+### Checking Coverage
+
+```bash
+pytest --cov=src tests/
+```
+
+### Coverage Report
+
+```bash
+pytest --cov=src --cov-report=html tests/
+# Opens htmlcov/index.html in browser
+```
+
+### Coverage Goals
+
+- **Unit tests**: >80% coverage
+- **Integration tests**: Critical paths covered
+- **View/Model tests**: 100% coverage (they're simple)
+
+## Best Practices
+
+### Test Organization
+
+- Group related tests in classes
+- Use descriptive test names (`test_has_process_chrome` not `test_1`)
+- One assertion focus per test (multiple assertions OK if related)
+
+### Fixtures
+
+- Use fixtures for common test data
+- Keep fixtures simple and focused
+- Use parametrize for variations
+
+### Mocking
+
+- Mock external dependencies (Windows API, file system)
+- Don't mock the system under test
+- Use real objects when possible
+
+### Async Testing
+
+- Use `async def` for async test functions
+- pytest-asyncio handles async automatically with `asyncio_mode = "auto"`
+- Use `AsyncMock` for async mocks
+
+### Error Testing
+
+- Test both success and failure paths
+- Use `pytest.raises()` for expected exceptions
+- Verify error messages with `match=` parameter
+
+## CI/CD Integration
+
+### GitHub Actions Example
+
+```yaml
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: |
+          pip install uv
+          uv sync
+      - name: Run tests
+        run: pytest --cov=src tests/
+```
+
+## Debugging Tests
+
+### Using pdb
+
+```python
+def test_feature():
+    import pdb; pdb.set_trace()
+    # Test code
+```
+
+### Verbose Output
+
+```bash
+pytest -vv -s tests/test_file.py
+```
+
+### Show Locals on Failure
+
+```bash
+pytest --showlocals tests/test_file.py
+```
+
+## Common Patterns
+
+### Testing Window Operations
+
+```python
+@pytest.fixture
+def mock_window():
+    return Window(
+        name="Test Window",
+        handle=12345,
+        status=Status.NORMAL,
+        bounding_box=BoundingBox(0, 0, 100, 100, 100, 100),
+    )
+
+def test_window_operations(mock_window):
+    assert mock_window.name == "Test Window"
+    assert mock_window.status == Status.NORMAL
+```
+
+### Testing UI Element Discovery
+
+```python
+@pytest.fixture
+def mock_tree_element():
+    return TreeElementNode(
+        name="Button1",
+        control_type="Button",
+        bounding_box=BoundingBox(10, 10, 50, 30, 40, 20),
+        center=Center(30, 20),
+        window_name="App",
+        metadata={},
+    )
+
+def test_element_discovery(mock_tree_element):
+    assert mock_tree_element.control_type == "Button"
+    assert mock_tree_element.center.x == 30
+```
+
+### Testing Analytics
+
+```python
+async def test_analytics_tracking():
+    mock_analytics = AsyncMock()
+    
+    @with_analytics(mock_analytics, "test_tool")
+    async def tool():
+        return "success"
+    
+    await tool()
+    mock_analytics.track_tool.assert_called_once()
+```
+
+<Note>
+  When testing Windows-specific functionality, consider running tests in a VM or Windows Sandbox to avoid affecting your main system.
+</Note>

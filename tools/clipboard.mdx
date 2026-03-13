@@ -1,0 +1,293 @@
+---
+title: Clipboard
+description: Read and write Windows clipboard content for copy/paste operations
+---
+
+The Clipboard tool provides programmatic access to the Windows system clipboard. Use it to read copied text or set clipboard content for pasting.
+
+## Overview
+
+Clipboard supports two modes:
+- **get** - Read current clipboard text content
+- **set** - Write text to clipboard
+
+<Note>
+  Clipboard only handles text data. Images, files, and other formats are not supported.
+</Note>
+
+## Parameters
+
+<ParamField path="mode" type="string" required>
+  Operation mode.
+  
+  Options: `get`, `set`
+</ParamField>
+
+<ParamField path="text" type="string">
+  Text to set in clipboard. Required for `set` mode.
+</ParamField>
+
+## Return Values
+
+**Get mode:**
+```
+Clipboard content:
+<text>
+```
+
+Or if empty/non-text:
+```
+Clipboard is empty or contains non-text data.
+```
+
+**Set mode:**
+```
+Clipboard set to: <first 100 chars>...
+```
+
+## Examples
+
+### Reading Clipboard
+
+```python
+# Get current clipboard text
+Clipboard(mode="get")
+# Returns: "Clipboard content:\nHello, world!"
+```
+
+### Setting Clipboard
+
+```python
+# Copy text to clipboard
+Clipboard(
+    mode="set",
+    text="https://example.com/share?id=12345"
+)
+# Returns: "Clipboard set to: https://example.com/share?id=12345"
+```
+
+### Large Text
+
+```python
+# Set large content
+Clipboard(
+    mode="set",
+    text="""Long document content...
+    Multiple lines...
+    Thousands of characters..."""
+)
+# Returns: "Clipboard set to: Long document content...\n    Multiple lines...\n    Thousands of charact..."
+```
+
+## Common Patterns
+
+### Copy and Paste Workflow
+
+```python
+# 1. Select text in application
+Click(loc=[300, 200])
+Shortcut("ctrl+a")
+Shortcut("ctrl+c")
+Wait(duration=0.5)
+
+# 2. Read clipboard
+result = Clipboard(mode="get")
+
+# 3. Process text
+processed_text = result.upper()  # Example transformation
+
+# 4. Set new clipboard content
+Clipboard(mode="set", text=processed_text)
+
+# 5. Paste
+Shortcut("ctrl+v")
+```
+
+### Extracting Data
+
+```python
+# Copy from UI element
+Click(label=10)  # Select element
+Shortcut("ctrl+c")
+Wait(duration=0.3)
+
+# Read extracted data
+data = Clipboard(mode="get")
+
+# Save to file
+FileSystem(
+    mode="write",
+    path="extracted_data.txt",
+    content=data
+)
+```
+
+### Sharing URLs
+
+```python
+# Copy current URL from browser
+Click(loc=[500, 50])  # Address bar
+Shortcut("ctrl+a")
+Shortcut("ctrl+c")
+Wait(duration=0.2)
+
+url = Clipboard(mode="get")
+
+# Share via another application
+App(mode="switch", name="slack")
+Click(label=5)  # Message field
+Shortcut("ctrl+v")
+Shortcut("enter")
+```
+
+### Batch Text Processing
+
+```python
+# Prepare list of items
+items = ["Item 1", "Item 2", "Item 3"]
+text_to_paste = "\n".join(items)
+
+# Set clipboard
+Clipboard(mode="set", text=text_to_paste)
+
+# Paste into target application
+App(mode="switch", name="notepad")
+Shortcut("ctrl+v")
+```
+
+### Form Auto-fill
+
+```python
+# Pre-fill clipboard with form data
+form_data = """John Doe
+john.doe@email.com
+555-1234
+123 Main Street"""
+
+Clipboard(mode="set", text=form_data)
+
+# User can now paste into form fields manually
+# Or use Type/MultiEdit for automation
+```
+
+### Clipboard Monitoring
+
+```python
+# Save initial clipboard state
+original = Clipboard(mode="get")
+
+# Perform operations that modify clipboard
+Click(loc=[300, 400])
+Shortcut("ctrl+c")
+Wait(duration=0.5)
+
+# Read new clipboard
+new_content = Clipboard(mode="get")
+
+# Restore original
+Clipboard(mode="set", text=original)
+```
+
+## Text Format Handling
+
+Clipboard automatically handles:
+- **Unicode** - Full UTF-16 support for international characters
+- **Line breaks** - Preserves `\n` and `\r\n`
+- **Special characters** - No escaping needed
+- **Whitespace** - Preserved exactly as-is
+
+```python
+# Unicode and special characters
+Clipboard(
+    mode="set",
+    text="Hello 世界! Special chars: @#$%^&*(){}[]<>"
+)
+# All characters preserved correctly
+```
+
+## Error Handling
+
+```python
+# Get mode - empty clipboard
+"Clipboard is empty or contains non-text data."
+
+# Get mode - non-text (image, file, etc.)
+"Clipboard is empty or contains non-text data."
+
+# Set mode - missing text parameter
+"Error: text parameter required for set mode."
+
+# Invalid mode
+"Error: mode must be either \"get\" or \"set\"."
+
+# General error
+"Error managing clipboard: <error details>"
+```
+
+## Use Cases
+
+### Data Extraction
+- Copy table data from web pages
+- Extract text from PDFs
+- Capture error messages
+- Copy file paths from Explorer
+
+### Automation
+- Pre-fill form fields via paste
+- Share data between applications
+- Batch paste operations
+- Template expansion
+
+### Testing
+- Verify copy functionality
+- Test paste handlers
+- Clipboard state validation
+- Data format testing
+
+## Security Considerations
+
+<Warning>
+  **Sensitive Data:** Clipboard content is accessible to all applications. Avoid storing passwords or secrets in clipboard for extended periods.
+</Warning>
+
+<Warning>
+  **Clipboard History:** Windows 10+ has clipboard history (Win+V). Use `Clipboard(mode="set", text="")` to clear sensitive data immediately after use.
+</Warning>
+
+## Best Practices
+
+<Tip>
+  **Add Wait(duration=0.3)** after `Shortcut("ctrl+c")` to ensure clipboard is updated before reading.
+</Tip>
+
+<Tip>
+  **Preserve original clipboard** by reading, storing, and restoring it after your operations.
+</Tip>
+
+<Tip>
+  **Check for empty/non-text** after Get operations before processing the result.
+</Tip>
+
+## Limitations
+
+- **Text only** - No support for images, files, or rich formats
+- **Clipboard history** - Only accesses current clipboard, not history
+- **No format detection** - Can't distinguish HTML, RTF, or plain text
+- **Single item** - Can't access multiple clipboard items
+
+## Performance
+
+Clipboard operations are extremely fast:
+- **Get:** Less than 10ms
+- **Set:** Less than 10ms
+
+<Note>
+  Clipboard is one of the fastest tools available. Use it for high-frequency copy/paste automation without performance concerns.
+</Note>
+
+## Related Tools
+
+- [Shortcut](/tools/shortcut) - Trigger Ctrl+C/Ctrl+V/Ctrl+X
+- [Type](/tools/type) - Direct text input (alternative to paste)
+- [FileSystem](/tools/filesystem) - Read/write files for persistent storage
+- [Scrape](/tools/scrape) - Extract web content without clipboard

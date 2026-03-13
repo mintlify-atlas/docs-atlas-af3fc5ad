@@ -1,0 +1,346 @@
+---
+title: Scroll
+description: Scroll vertically or horizontally in any scrollable area
+---
+
+The **Scroll** tool scrolls content vertically or horizontally at specified coordinates, UI elements, or the current mouse position. Essential for navigating long pages, lists, and documents.
+
+## Purpose & Use Cases
+
+- **Page Navigation**: Scroll through web pages and documents
+- **List Browsing**: Navigate long lists, tables, and tree views
+- **Content Discovery**: Reveal hidden content below/above the viewport
+- **Horizontal Scrolling**: Scroll wide content like spreadsheets
+- **Precise Control**: Fine-tune scroll amount with wheel_times
+
+## Parameters
+
+<ParamField path="loc" type="array" optional>
+  Coordinates `[x, y]` where to scroll. If omitted, scrolls at current mouse position.
+  Use this to target specific scrollable areas.
+</ParamField>
+
+<ParamField path="label" type="integer" optional>
+  UI element label from Snapshot output. Scrolls at the center of the labeled element.
+  Useful for scrolling specific panels or frames.
+</ParamField>
+
+<ParamField path="type" type="string" default="vertical">
+  Scroll direction type:
+  - `"vertical"`: Up/down scrolling (default)
+  - `"horizontal"`: Left/right scrolling
+</ParamField>
+
+<ParamField path="direction" type="string" default="down">
+  Scroll direction:
+  - For `type="vertical"`: `"up"` or `"down"`
+  - For `type="horizontal"`: `"left"` or `"right"`
+</ParamField>
+
+<ParamField path="wheel_times" type="integer" default="1">
+  Number of scroll wheel ticks. Each tick scrolls approximately 3-5 lines:
+  - `1`: Small scroll (1 tick ≈ 3-5 lines)
+  - `3`: Medium scroll (~1 screen height)
+  - `5`: Large scroll (~1.5-2 screen heights)
+  - `10+`: Very large scroll
+</ParamField>
+
+## Return Values
+
+Returns a success message:
+```
+"Scrolled vertical down by 3 wheel times at (640,480)."
+"Scrolled horizontal left by 5 wheel times at (800,600)."
+```
+
+Returns error if:
+- Invalid `type` or `direction` combination
+- `label` is out of range
+
+## Code Examples
+
+### Basic Vertical Scrolling
+```python
+# Scroll down in the current window
+Scroll(direction="down", wheel_times=3)
+
+# Scroll up
+Scroll(direction="up", wheel_times=3)
+```
+
+### Scroll at Specific Location
+```python
+# Scroll in a specific area by coordinates
+Scroll(
+    loc=[640, 480],
+    direction="down",
+    wheel_times=5
+)
+```
+
+### Scroll Using Element Label
+```python
+# Scroll in a specific panel/frame
+Snapshot(use_vision=True)
+Scroll(
+    label=15,  # Scrollable area from Snapshot
+    direction="down",
+    wheel_times=3
+)
+```
+
+### Horizontal Scrolling
+```python
+# Scroll right in a wide spreadsheet
+Scroll(
+    loc=[500, 300],
+    type="horizontal",
+    direction="right",
+    wheel_times=5
+)
+
+# Scroll left
+Scroll(
+    type="horizontal",
+    direction="left",
+    wheel_times=3
+)
+```
+
+### Page-by-Page Navigation
+```python
+# Scroll down one full page
+Scroll(direction="down", wheel_times=10)
+Wait(duration=0.5)  # Allow content to load
+
+# Scroll up one page
+Scroll(direction="up", wheel_times=10)
+```
+
+## Common Patterns
+
+### Web Page Scraping
+```python
+# Scroll through entire page to load dynamic content
+for i in range(5):
+    Snapshot(use_dom=True)  # Extract visible content
+    Scroll(direction="down", wheel_times=5)
+    Wait(duration=1)  # Wait for lazy-loaded content
+```
+
+### Find Item in Long List
+```python
+# Scroll until target item is visible
+for i in range(10):
+    state = Snapshot(use_vision=True)
+    if "Target Item" in state:
+        Click(label=find_label("Target Item"))
+        break
+    Scroll(direction="down", wheel_times=3)
+    Wait(duration=0.5)
+```
+
+### Scroll to Top/Bottom
+```python
+# Scroll to top of page
+Shortcut("ctrl+home")
+Wait(duration=0.5)
+
+# Scroll to bottom
+Shortcut("ctrl+end")
+Wait(duration=0.5)
+```
+
+### Multi-Panel Scrolling
+```python
+# Scroll different panels independently
+Snapshot(use_vision=True)
+
+# Scroll left panel
+Scroll(label=10, direction="down", wheel_times=3)
+
+# Scroll right panel
+Scroll(label=15, direction="down", wheel_times=3)
+```
+
+### Precise Scrolling
+```python
+# Small incremental scroll for precision
+Scroll(direction="down", wheel_times=1)  # Just 3-5 lines
+Wait(duration=0.3)
+Snapshot(use_vision=True)  # Check if target is visible
+```
+
+## Best Practices
+
+<Tip>
+**Wait After Scrolling**
+Always add a small wait after scrolling to allow:
+- Content rendering to complete
+- Lazy-loaded images/data to appear
+- Scroll animations to finish
+
+```python
+Scroll(direction="down", wheel_times=5)
+Wait(duration=0.5)
+```
+</Tip>
+
+<Tip>
+**Use Labels for Multi-Panel UIs**
+When working with split panes or multiple scrollable areas:
+1. Capture Snapshot to identify scrollable regions
+2. Use labels to target specific panels
+3. Avoid coordinate-based scrolling which may hit wrong panel
+</Tip>
+
+<Tip>
+**Adjust wheel_times for Content Type**
+- **Text documents**: 3-5 wheel times ≈ 1 page
+- **Image galleries**: 2-3 wheel times for each row
+- **Long lists**: 5-10 wheel times for rapid navigation
+- **Web pages**: 5 wheel times ≈ half viewport height
+</Tip>
+
+<Warning>
+**Scroll Amount Varies**
+The actual scroll distance depends on:
+- Application scroll speed settings
+- System mouse wheel settings
+- Content type (text vs images)
+- Window size
+
+Test with small `wheel_times` values first to calibrate.
+</Warning>
+
+<Warning>
+**Mouse Position Matters**
+When `loc` and `label` are omitted, scroll occurs at the **current mouse position**. Ensure the cursor is over the target scrollable area:
+```python
+Move(loc=[640, 480])  # Position cursor first
+Scroll(direction="down", wheel_times=3)
+```
+</Warning>
+
+## Advanced Usage
+
+### Smooth Scrolling Animation
+```python
+# Scroll gradually for visual effect
+for i in range(10):
+    Scroll(direction="down", wheel_times=1)
+    Wait(duration=0.1)
+```
+
+### Scroll Until Bottom Reached
+```python
+# Detect end of scrollable content
+prev_state = None
+for i in range(20):
+    state = Snapshot()
+    if state == prev_state:  # No change = reached bottom
+        break
+    prev_state = state
+    Scroll(direction="down", wheel_times=5)
+    Wait(duration=0.5)
+```
+
+### Two-Dimensional Navigation
+```python
+# Scroll both horizontally and vertically
+# Scroll right first
+Scroll(type="horizontal", direction="right", wheel_times=5)
+Wait(duration=0.3)
+
+# Then scroll down
+Scroll(type="vertical", direction="down", wheel_times=5)
+```
+
+### Context-Aware Scrolling
+```python
+# Scroll different amounts based on window
+state = Snapshot()
+if "Browser" in state.active_window:
+    wheel_times = 5  # Larger scroll for web pages
+elif "Notepad" in state.active_window:
+    wheel_times = 3  # Smaller scroll for text
+
+Scroll(direction="down", wheel_times=wheel_times)
+```
+
+<Accordion title="Horizontal Scroll Implementation">
+Horizontal scrolling uses **Shift + Wheel** combination:
+- Presses Shift key
+- Performs vertical wheel scroll (converted to horizontal by Shift)
+- Releases Shift key
+
+Some applications may not support this. Alternatives:
+- Use arrow keys: `Shortcut("left")` or `Shortcut("right")`
+- Use scrollbar: Click and drag the horizontal scrollbar
+- Use application-specific shortcuts
+</Accordion>
+
+<Accordion title="Scrollable Areas in Snapshot">
+Snapshot identifies scrollable areas and lists them separately from interactive elements:
+
+```
+List of Scrollable Elements:
+[50] ScrollBar "Vertical Scrollbar" (850, 400) in Window: Document.docx
+[51] ScrollBar "Horizontal Scrollbar" (400, 750) in Window: Spreadsheet.xlsx
+```
+
+Use these labels to target specific scrollable regions.
+</Accordion>
+
+## Related Tools
+
+- [Snapshot](/tools/snapshot) - Identify scrollable areas and their labels
+- [Move](/tools/move) - Position cursor before scrolling
+- [Shortcut](/tools/shortcut) - Alternative scroll methods (Page Up/Down, Home/End)
+- [Click](/tools/click) - Click scrollbar arrows for precise control
+
+## Implementation Details
+
+From `desktop/service.py:626-661`:
+
+```python
+def scroll(
+    self,
+    loc: tuple[int, int] = None,
+    type: Literal["horizontal", "vertical"] = "vertical",
+    direction: Literal["up", "down", "left", "right"] = "down",
+    wheel_times: int = 1,
+) -> str | None:
+    if loc:
+        self.move(loc)
+    match type:
+        case "vertical":
+            match direction:
+                case "up":
+                    uia.WheelUp(wheel_times)
+                case "down":
+                    uia.WheelDown(wheel_times)
+                case _:
+                    return 'Invalid direction. Use "up" or "down".'
+        case "horizontal":
+            match direction:
+                case "left":
+                    uia.PressKey(uia.Keys.VK_SHIFT, waitTime=0.05)
+                    uia.WheelUp(wheel_times)
+                    sleep(0.05)
+                    uia.ReleaseKey(uia.Keys.VK_SHIFT, waitTime=0.05)
+                case "right":
+                    uia.PressKey(uia.Keys.VK_SHIFT, waitTime=0.05)
+                    uia.WheelDown(wheel_times)
+                    sleep(0.05)
+                    uia.ReleaseKey(uia.Keys.VK_SHIFT, waitTime=0.05)
+                case _:
+                    return 'Invalid direction. Use "left" or "right".'
+        case _:
+            return 'Invalid type. Use "horizontal" or "vertical".'
+    return None
+```
+
+- Moves cursor to target location before scrolling
+- Horizontal scroll via Shift + Wheel combination
+- Direct UIAutomation wheel events for smooth scrolling

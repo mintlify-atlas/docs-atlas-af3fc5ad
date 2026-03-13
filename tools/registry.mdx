@@ -1,0 +1,453 @@
+---
+title: Registry
+description: Read and write Windows Registry keys and values
+---
+
+The Registry tool provides programmatic access to the Windows Registry. Use it to read, write, delete, and list registry keys and values for system configuration and application settings.
+
+## Overview
+
+Registry supports four modes:
+- **get** - Read a specific registry value
+- **set** - Create or update a registry value
+- **delete** - Remove a value or entire key
+- **list** - Enumerate values and sub-keys under a path
+
+<Warning>
+  **Modifying the registry can break Windows or applications.** Always backup important keys before making changes and verify paths carefully.
+</Warning>
+
+## Parameters
+
+<ParamField path="mode" type="string" required>
+  Operation mode.
+  
+  Options: `get`, `set`, `delete`, `list`
+</ParamField>
+
+<ParamField path="path" type="string" required>
+  Registry path in PowerShell format.
+  
+  **Example:** `"HKCU:\\Software\\MyApp"` or `"HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion"`
+  
+  <Note>
+    Use PowerShell registry path format (`:` after hive name, double backslashes).
+  </Note>
+</ParamField>
+
+<ParamField path="name" type="string">
+  Value name to read, set, or delete.
+  - **Required** for `get` and `set` modes
+  - **Optional** for `delete` (omit to delete entire key)
+  - **Ignored** for `list` mode
+</ParamField>
+
+<ParamField path="value" type="string">
+  Value data to write. Required for `set` mode.
+</ParamField>
+
+<ParamField path="type" type="string" default="String">
+  Registry value type for `set` mode.
+  
+  Options: `String`, `DWord`, `QWord`, `Binary`, `MultiString`, `ExpandString`
+</ParamField>
+
+## Return Values
+
+**Get mode:**
+```
+Registry value [HKCU:\Software\MyApp] "Version" = 1.2.3
+```
+
+**Set mode:**
+```
+Registry value [HKCU:\Software\MyApp] "Version" set to "1.2.3" (type: String).
+```
+
+**Delete mode:**
+```
+Registry value [HKCU:\Software\MyApp] "OldSetting" deleted.
+```
+Or:
+```
+Registry key [HKCU:\Software\MyApp] deleted.
+```
+
+**List mode:**
+```
+Registry key [HKCU:\Software\MyApp]:
+Values:
+Version: 1.2.3
+InstallPath: C:\Program Files\MyApp
+
+Sub-Keys:
+Settings
+Cache
+```
+
+## Registry Hives
+
+| Hive | PowerShell Path | Description |
+|------|----------------|-------------|
+| **HKEY_CURRENT_USER** | `HKCU:\` | Current user settings |
+| **HKEY_LOCAL_MACHINE** | `HKLM:\` | System-wide settings |
+| **HKEY_CLASSES_ROOT** | `HKCR:\` | File associations |
+| **HKEY_USERS** | `HKU:\` | All user profiles |
+| **HKEY_CURRENT_CONFIG** | `HKCC:\` | Current hardware profile |
+
+<Note>
+  **HKLM** operations typically require administrator privileges.
+</Note>
+
+## Value Types
+
+<ParamField path="String" type="REG_SZ">
+  Standard string value.
+  
+  **Example:** `"Hello World"`, `"C:\\Path\\To\\File"`
+</ParamField>
+
+<ParamField path="ExpandString" type="REG_EXPAND_SZ">
+  String with environment variables.
+  
+  **Example:** `"%USERPROFILE%\\Documents"`
+</ParamField>
+
+<ParamField path="DWord" type="REG_DWORD">
+  32-bit integer (0 to 4,294,967,295).
+  
+  **Example:** `"0"`, `"1"`, `"255"`
+</ParamField>
+
+<ParamField path="QWord" type="REG_QWORD">
+  64-bit integer.
+  
+  **Example:** `"1000000"`
+</ParamField>
+
+<ParamField path="Binary" type="REG_BINARY">
+  Binary data (hex string).
+  
+  **Example:** `"01,FF,A3,B2"`
+</ParamField>
+
+<ParamField path="MultiString" type="REG_MULTI_SZ">
+  Array of strings (newline-separated).
+  
+  **Example:** `"Value1\nValue2\nValue3"`
+</ParamField>
+
+## Examples
+
+### Reading Values
+
+```python
+# Read user setting
+Registry(
+    mode="get",
+    path="HKCU:\\Software\\MyApp",
+    name="Version"
+)
+
+# Read Windows setting
+Registry(
+    mode="get",
+    path="HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion",
+    name="ProgramFilesDir"
+)
+```
+
+### Writing Values
+
+```python
+# Set string value
+Registry(
+    mode="set",
+    path="HKCU:\\Software\\MyApp",
+    name="InstallDate",
+    value="2024-03-13",
+    type="String"
+)
+
+# Set integer value
+Registry(
+    mode="set",
+    path="HKCU:\\Software\\MyApp\\Settings",
+    name="MaxConnections",
+    value="10",
+    type="DWord"
+)
+
+# Set path with environment variable
+Registry(
+    mode="set",
+    path="HKCU:\\Software\\MyApp",
+    name="DataPath",
+    value="%APPDATA%\\MyApp\\Data",
+    type="ExpandString"
+)
+```
+
+### Deleting Values and Keys
+
+```python
+# Delete a value
+Registry(
+    mode="delete",
+    path="HKCU:\\Software\\MyApp",
+    name="OldSetting"
+)
+
+# Delete entire key (and all sub-keys)
+Registry(
+    mode="delete",
+    path="HKCU:\\Software\\MyApp\\Cache"
+)
+```
+
+### Listing Registry Contents
+
+```python
+# List all values and sub-keys
+Registry(
+    mode="list",
+    path="HKCU:\\Software\\MyApp"
+)
+```
+
+## Common Patterns
+
+### Application Configuration
+
+```python
+# Save application settings
+Registry(
+    mode="set",
+    path="HKCU:\\Software\\MyApp\\Settings",
+    name="Theme",
+    value="Dark",
+    type="String"
+)
+
+Registry(
+    mode="set",
+    path="HKCU:\\Software\\MyApp\\Settings",
+    name="AutoSave",
+    value="1",
+    type="DWord"
+)
+
+# Read settings later
+theme = Registry(
+    mode="get",
+    path="HKCU:\\Software\\MyApp\\Settings",
+    name="Theme"
+)
+```
+
+### System Information
+
+```python
+# Get Windows version
+Registry(
+    mode="get",
+    path="HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+    name="ProductName"
+)
+
+# Get install directory
+Registry(
+    mode="get",
+    path="HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion",
+    name="ProgramFilesDir"
+)
+```
+
+### Cleanup and Migration
+
+```python
+# List old settings
+old_settings = Registry(
+    mode="list",
+    path="HKCU:\\Software\\MyApp\\v1"
+)
+
+# Migrate to new location
+Registry(
+    mode="set",
+    path="HKCU:\\Software\\MyApp\\v2",
+    name="MigratedSetting",
+    value="NewValue"
+)
+
+# Delete old key
+Registry(
+    mode="delete",
+    path="HKCU:\\Software\\MyApp\\v1"
+)
+```
+
+### Feature Toggles
+
+```python
+# Enable experimental feature
+Registry(
+    mode="set",
+    path="HKCU:\\Software\\MyApp\\Features",
+    name="ExperimentalUI",
+    value="1",
+    type="DWord"
+)
+
+# Disable feature
+Registry(
+    mode="set",
+    path="HKCU:\\Software\\MyApp\\Features",
+    name="ExperimentalUI",
+    value="0",
+    type="DWord"
+)
+```
+
+### Checking Installation Status
+
+```python
+# Check if application is installed
+try:
+    Registry(
+        mode="get",
+        path="HKLM:\\SOFTWARE\\MyVendor\\MyApp",
+        name="Version"
+    )
+    print("MyApp is installed")
+except:
+    print("MyApp is not installed")
+```
+
+## Path Format
+
+<Warning>
+  **Always use PowerShell registry path format:**
+  
+  ✅ Correct: `HKCU:\\Software\\MyApp`
+  
+  ❌ Wrong: `HKEY_CURRENT_USER\\Software\\MyApp`
+</Warning>
+
+**Common translations:**
+- `HKEY_CURRENT_USER` → `HKCU:`
+- `HKEY_LOCAL_MACHINE` → `HKLM:`
+- `HKEY_CLASSES_ROOT` → `HKCR:`
+
+## Auto-Creation
+
+When using `set` mode:
+- **Parent keys are created automatically** if they don't exist
+- No need to create the full path manually
+
+```python
+# This works even if HKCU:\Software\MyApp doesn't exist
+Registry(
+    mode="set",
+    path="HKCU:\\Software\\MyApp\\Settings\\Advanced",
+    name="DebugMode",
+    value="1",
+    type="DWord"
+)
+# Creates: MyApp, MyApp\Settings, MyApp\Settings\Advanced
+```
+
+## Error Handling
+
+```python
+# Value not found
+"Error reading registry: Cannot find path..."
+
+# Access denied (requires admin)
+"Error writing registry: Requested registry access is not allowed."
+
+# Invalid type
+"Error: invalid registry type 'InvalidType'. Allowed: Binary, DWord, ExpandString, MultiString, QWord, String"
+
+# Missing required parameter
+"Error: name parameter is required for get mode."
+"Error: value parameter is required for set mode."
+```
+
+## Permissions
+
+<Warning>
+  **HKLM (Local Machine) operations require administrator rights.** Run the MCP server as administrator or use HKCU for user-specific settings.
+</Warning>
+
+**Safe to modify without admin:**
+- `HKCU:\` (current user)
+- `HKCU:\Software\` (user applications)
+
+**Requires administrator:**
+- `HKLM:\` (system-wide)
+- `HKLM:\SOFTWARE\` (installed applications)
+- `HKCR:\` (file associations)
+
+## Best Practices
+
+<Tip>
+  **Always use HKCU for application settings** unless system-wide configuration is required.
+</Tip>
+
+<Tip>
+  **List before deleting** to verify you're targeting the correct key/value.
+</Tip>
+
+<Warning>
+  **Never modify Windows system keys** unless you know exactly what you're doing. Stick to `HKCU:\Software\` for safety.
+</Warning>
+
+<Tip>
+  **Use descriptive value names** like `LastUpdateCheck` instead of `Value1`.
+</Tip>
+
+## Dangerous Keys to Avoid
+
+<Warning>
+  **Do not modify these critical system keys:**
+  
+  - `HKLM:\SYSTEM\CurrentControlSet\`
+  - `HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon`
+  - `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` (unless intended)
+  - Any keys related to drivers, security, or boot configuration
+</Warning>
+
+## Use Cases
+
+### Application Settings Storage
+- User preferences
+- Window positions and sizes
+- Recently used files
+- Feature flags
+
+### System Configuration
+- Environment variables
+- File associations
+- Application paths
+- Service configuration
+
+### Deployment and Automation
+- Silent installation settings
+- License key storage
+- Configuration deployment
+- Feature rollout
+
+## Limitations
+
+- **PowerShell paths only** - No HKEY_* format support
+- **String values only** - Binary data must be hex strings
+- **No transactions** - Changes are immediate
+- **No comparison** - Can't atomically compare-and-swap
+- **No permissions management** - Can't modify ACLs
+
+## Related Tools
+
+- [PowerShell](/tools/shell) - Advanced registry operations with `Get-ItemProperty`, `Set-ItemProperty`, `New-Item`
+- [FileSystem](/tools/filesystem) - Alternative for storing configuration in files
+- [Process](/tools/process) - Restart applications after registry changes

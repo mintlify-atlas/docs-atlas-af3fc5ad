@@ -1,0 +1,630 @@
+---
+title: UI Automation
+description: Understanding Windows accessibility tree, UI element detection, and coordinate systems
+---
+
+Windows-MCP leverages the **Windows UI Automation API** (UIA) to discover and interact with UI elements across all applications. This page explains how UIA works, how Windows-MCP uses it, and key concepts like the accessibility tree and coordinate systems.
+
+## Windows UI Automation API
+
+Windows UI Automation is a **Windows accessibility framework** that:
+- Exposes UI elements as a **hierarchical tree** (the "accessibility tree")
+- Provides **properties** for each element (name, type, bounds, state, etc.)
+- Supports **patterns** for interaction (invoke button, set text, scroll, etc.)
+- Fires **events** when UI changes (focus, structure, property changes)
+
+<Info>
+UI Automation is the **same API** used by screen readers like NVDA and JAWS. If an application is accessible to screen readers, Windows-MCP can automate it.
+</Info>
+
+### Supported Frameworks
+
+UIA supports applications built with:
+- **Win32**: Classic Windows applications
+- **Windows Forms**: .NET WinForms
+- **WPF**: Windows Presentation Foundation
+- **UWP/WinUI**: Modern Windows apps
+- **Qt**: Cross-platform C++ framework
+- **Electron**: Chromium-based apps (limited support)
+- **Web Browsers**: Chrome, Edge, Firefox (via accessibility extensions)
+
+### What's Accessible?
+
+Not all UI elements are exposed via UIA:
+
+✅ **Accessible**:
+- Buttons, text boxes, checkboxes, radio buttons
+- Menus, toolbars, status bars
+- Lists, trees, tables, data grids
+- Tabs, sliders, combo boxes
+- Window frames, title bars
+- Web page elements (when browser accessibility is enabled)
+
+❌ **Not Accessible**:
+- Custom-drawn UI (e.g., game engines)
+- Direct3D/OpenGL graphics
+- Video content
+- Canvas elements without ARIA labels
+
+<Accordion title="Browser Accessibility">
+Browsers expose web page content via UIA when:
+1. **Accessibility is enabled** (usually automatic)
+2. **DOM is rendered** (JavaScript has executed)
+3. **ARIA attributes are present** (for custom controls)
+
+Windows-MCP detects browsers and uses special "DOM mode" to extract only web page elements, filtering out browser UI (address bar, tabs, etc.).
+</Accordion>
+
+## Accessibility Tree
+
+The accessibility tree is a **hierarchical representation** of the UI, similar to the DOM in web browsers.
+
+### Tree Structure
+
+```
+Desktop (Root)
+├─ Taskbar
+│  ├─ Start Button
+│  ├─ Search Box
+│  └─ Notification Area
+├─ Window: "Visual Studio Code"
+│  ├─ Menu Bar
+│  │  ├─ File
+│  │  ├─ Edit
+│  │  └─ View
+│  ├─ Title Bar
+│  ├─ Editor Pane
+│  │  ├─ Tab: "main.py"
+│  │  └─ Text Editor
+│  └─ Status Bar
+└─ Window: "Chrome"
+   ├─ Address Bar
+   ├─ Web Page (RootWebArea)
+   │  ├─ Heading: "Welcome"
+   │  ├─ Paragraph
+   │  ├─ Button: "Sign In"
+   │  └─ Link: "Learn More"
+   └─ Bookmarks Bar
+```
+
+### Element Properties
+
+Each element has properties describing its state and behavior:
+
+| Property | Description | Example |
+|----------|-------------|----------|
+| **Name** | Display text or label | "Sign In", "Address Bar" |
+| **ControlType** | Element type (button, edit, etc.) | `ButtonControl`, `EditControl` |
+| **AutomationId** | Unique identifier (if set by developer) | `"submitButton"` |
+| **ClassName** | CSS class or Win32 window class | `"Button"`, `"Edit"` |
+| **BoundingRectangle** | Physical pixel coordinates | `Rect(100, 200, 300, 250)` |
+| **IsEnabled** | Whether element accepts input | `True` / `False` |
+| **IsOffscreen** | Whether element is visible | `True` / `False` |
+| **HasKeyboardFocus** | Whether element is focused | `True` / `False` |
+| **HelpText** | Tooltip or accessibility description | "Click to submit form" |
+
+### Control Types
+
+Windows-MCP categorizes elements by control type:
+
+**Interactive Controls** (clickable, typeable):
+```python
+INTERACTIVE_CONTROL_TYPE_NAMES = {
+    'ButtonControl',      # Standard buttons
+    'CheckBoxControl',    # Checkboxes
+    'RadioButtonControl', # Radio buttons
+    'EditControl',        # Text input fields
+    'ComboBoxControl',    # Dropdown menus
+    'ListItemControl',    # Selectable list items
+    'TabItemControl',     # Tab headers
+    'HyperlinkControl',   # Clickable links
+    'MenuItemControl',    # Menu options
+    'TreeItemControl',    # Tree view items
+    'DataItemControl',    # Data grid cells
+}
+```
+
+**Scrollable Controls**:
+```python
+# Elements with ScrollPattern (vertical or horizontal scrolling)
+# Detected by checking for IUIAutomationScrollPattern interface
+```
+
+**Informative Controls** (read-only text):
+```python
+INFORMATIVE_CONTROL_TYPE_NAMES = {
+    'TextControl',    # Static text labels
+    'ImageControl',   # Images with alt text
+}
+```
+
+## UI Element Detection
+
+Windows-MCP uses **tree traversal** to discover UI elements.
+
+### Traversal Algorithm
+
+<Steps>
+1. **Get Root Element**
+   - For active window: `ControlFromHandle(window_handle)`
+   - For desktop: `GetRootElement()`
+
+2. **Build Cache Request**
+   - Pre-fetch properties in bulk to reduce COM round-trips
+   - Cache: Name, ControlType, BoundingRectangle, IsEnabled, IsOffscreen, etc.
+
+3. **Recursive Traversal**
+   - Visit node, check if interactive/scrollable/informative
+   - Get cached children
+   - Recurse on each child
+
+4. **Filter by Visibility**
+   - Skip offscreen elements (unless `EditControl` or browser `ListItemControl`)
+   - Skip elements with zero area
+   - Skip disabled elements
+
+5. **Clip to Window Bounds**
+   - Use IOU (Intersection over Union) to clip element bounding boxes
+   - Only keep elements within visible window area
+</Steps>
+
+### Code Example
+
+<CodeGroup>
+```python Tree Traversal
+def tree_traversal(
+    self, 
+    node: Control,
+    window_bounding_box: Rect,
+    window_name: str,
+    is_browser: bool,
+    interactive_nodes: list[TreeElementNode],
+    scrollable_nodes: list[ScrollElementNode],
+):
+    # Check visibility
+    is_offscreen = node.CachedIsOffscreen
+    element_bounding_box = node.CachedBoundingRectangle
+    area = element_bounding_box.width() * element_bounding_box.height()
+    
+    is_visible = (area > 0) and not is_offscreen and node.CachedIsControlElement
+    
+    if is_visible and node.CachedIsEnabled:
+        control_type_name = node.CachedControlTypeName
+        
+        # Interactive check
+        if control_type_name in INTERACTIVE_CONTROL_TYPE_NAMES:
+            metadata = {
+                'has_focused': node.CachedHasKeyboardFocus,
+            }
+            
+            # Extract control-specific metadata
+            if isinstance(node, EditControl):
+                value = node.GetCachedPropertyValue(PropertyId.LegacyIAccessibleValueProperty)
+                metadata['value'] = value.strip() if value else '(empty)'
+            
+            # Clip to window bounds
+            bounding_box = self.iou_bounding_box(window_bounding_box, element_bounding_box)
+            
+            interactive_nodes.append(TreeElementNode(
+                name=node.CachedName.strip(),
+                control_type=node.CachedLocalizedControlType,
+                bounding_box=bounding_box,
+                center=bounding_box.get_center(),
+                window_name=window_name,
+                metadata=metadata
+            ))
+        
+        # Scrollable check
+        if control_type_name not in INTERACTIVE_CONTROL_TYPE_NAMES:
+            try:
+                scroll_pattern = node.GetCachedPattern(PatternId.ScrollPattern, True)
+                if scroll_pattern and scroll_pattern.VerticallyScrollable:
+                    scrollable_nodes.append(ScrollElementNode(...))
+            except Exception:
+                pass
+    
+    # Recurse on children
+    children = CachedControlHelper.get_cached_children(node, children_cache_req)
+    for child in reversed(children):  # Right-to-left for visual order
+        self.tree_traversal(child, window_bounding_box, window_name, is_browser, ...)
+```
+
+```python IOU Clipping
+def iou_bounding_box(self, window_box: Rect, element_box: Rect) -> BoundingBox:
+    """Clip element to window bounds using intersection"""
+    clipped = element_box.intersect(window_box).intersect(self.screen_box)
+    
+    if clipped.right > clipped.left and clipped.bottom > clipped.top:
+        return BoundingBox(
+            left=clipped.left,
+            top=clipped.top,
+            right=clipped.right,
+            bottom=clipped.bottom,
+            width=clipped.width(),
+            height=clipped.height()
+        )
+    
+    return BoundingBox(left=0, top=0, right=0, bottom=0, width=0, height=0)
+```
+</CodeGroup>
+
+### Performance: Caching
+
+Accessing properties individually is **slow** (each property access = 1 COM call):
+
+```python
+# ❌ SLOW: 5 COM round-trips per element
+name = node.Name
+type = node.ControlTypeName
+enabled = node.IsEnabled
+offscreen = node.IsOffscreen
+bounds = node.BoundingRectangle
+```
+
+Windows-MCP uses **cache requests** to pre-fetch properties:
+
+```python
+# ✅ FAST: 1 COM round-trip for all properties
+cache_req = CacheRequestFactory.create_tree_traversal_cache()
+cache_req.AddProperty(PropertyId.NameProperty)
+cache_req.AddProperty(PropertyId.ControlTypeProperty)
+cache_req.AddProperty(PropertyId.IsEnabledProperty)
+cache_req.AddProperty(PropertyId.IsOffscreenProperty)
+cache_req.AddProperty(PropertyId.BoundingRectangleProperty)
+cache_req.TreeScope = TreeScope.TreeScope_Element | TreeScope.TreeScope_Children
+
+# Build cached control
+node = element.FindFirstBuildCache(TreeScope.Element, condition, cache_req)
+
+# Access cached properties (no COM call)
+name = node.CachedName
+type = node.CachedControlTypeName
+enabled = node.CachedIsEnabled
+offscreen = node.CachedIsOffscreen
+bounds = node.CachedBoundingRectangle
+```
+
+<Note>
+Caching improves traversal performance by **~10x**. Without it, capturing a complex UI tree would take 10+ seconds.
+</Note>
+
+## Coordinate Systems
+
+### Physical vs Logical Pixels
+
+Windows has two coordinate systems:
+
+**Logical Pixels** (DPI-scaled):
+- Traditional Win32 coordinates
+- Scaled by Windows display scaling (100%, 125%, 150%, etc.)
+- Example: 1920x1080 screen at 150% scaling = 1280x720 logical pixels
+
+**Physical Pixels** (DPI-aware):
+- Actual screen pixels
+- Matches screenshot coordinates
+- Example: 1920x1080 screen = 1920x1080 physical pixels
+
+<Accordion title="DPI Scaling Problem">
+On a 1920x1080 screen with 150% scaling:
+
+❌ **Without DPI awareness**:
+- `GetCursorPos()` returns `(640, 360)` (logical pixels)
+- `element.BoundingRectangle` returns `(100, 100, 200, 150)` (logical pixels)
+- `Click(640, 360)` clicks at `(960, 540)` (physical pixels)
+- **Result**: Click misses target by 50%!
+
+✅ **With DPI awareness**:
+- `GetCursorPos()` returns `(960, 540)` (physical pixels)
+- `element.BoundingRectangle` returns `(150, 150, 300, 225)` (physical pixels)
+- `Click(960, 540)` clicks at `(960, 540)` (physical pixels)
+- **Result**: Click hits target exactly!
+</Accordion>
+
+### Ensuring DPI Awareness
+
+Windows-MCP calls `SetProcessDpiAwareness(PerMonitorDpiAware)` at module load:
+
+```python
+# uia/core.py
+SetProcessDpiAwareness(ProcessDpiAwareness.PerMonitorDpiAware)
+```
+
+This ensures:
+- `BoundingRectangle` uses **physical pixels**
+- Mouse clicks use **physical pixels**
+- Screenshots use **physical pixels**
+- No coordinate conversion needed!
+
+### Virtual Screen Coordinates
+
+Windows supports **multi-monitor setups** with negative coordinates:
+
+```
+  Monitor 1 (-1920, 0)     Monitor 2 (0, 0)        Monitor 3 (1920, 0)
+┌──────────────────────┬──────────────────────┬──────────────────────┐
+│                      │                      │                      │
+│                      │    Primary Monitor   │                      │
+│      (Left)          │      (Center)        │      (Right)         │
+│                      │                      │                      │
+│  1920x1080           │    1920x1080         │    1920x1080         │
+└──────────────────────┴──────────────────────┴──────────────────────┘
+```
+
+**Virtual Screen Origin**: Top-left of leftmost monitor (may be negative)
+
+```python
+def GetVirtualScreenRect() -> Tuple[int, int, int, int]:
+    """Returns (left, top, width, height) of virtual screen"""
+    SM_XVIRTUALSCREEN = 76
+    SM_YVIRTUALSCREEN = 77
+    SM_CXVIRTUALSCREEN = 78
+    SM_CYVIRTUALSCREEN = 79
+    return (
+        ctypes.windll.user32.GetSystemMetrics(SM_XVIRTUALSCREEN),    # e.g., -1920
+        ctypes.windll.user32.GetSystemMetrics(SM_YVIRTUALSCREEN),    # e.g., 0
+        ctypes.windll.user32.GetSystemMetrics(SM_CXVIRTUALSCREEN),   # e.g., 5760
+        ctypes.windll.user32.GetSystemMetrics(SM_CYVIRTUALSCREEN),   # e.g., 1080
+    )
+```
+
+Windows-MCP handles this automatically:
+- Element coordinates are in **virtual screen space**
+- Screenshots capture **all monitors** (or selected displays)
+- Annotations adjust for virtual screen offset
+
+### Display Selection
+
+The `Snapshot` tool supports capturing specific displays:
+
+```python
+# Capture all displays (default)
+Snapshot()
+
+# Capture only primary display
+Snapshot(display=[0])
+
+# Capture displays 0 and 1
+Snapshot(display=[0, 1])
+```
+
+Windows-MCP calculates the union bounding box of selected displays and clips all data (windows, elements, screenshot) to that region.
+
+## Element Identification
+
+### Label-Based Addressing
+
+Windows-MCP assigns **numeric labels** to interactive elements in the order they're discovered:
+
+```
+Interactive Elements:
+[0] Button "Sign In" at (245, 567)
+[1] Edit "Username" at (150, 234)
+[2] Edit "Password" at (150, 289)
+[3] CheckBox "Remember me" at (150, 344)
+[4] Link "Forgot password?" at (245, 400)
+
+Scrollable Elements:
+[5] Pane "News Feed" at (800, 200) - 45% scrolled
+```
+
+Tools can reference elements by label:
+
+```python
+# Click button [0]
+Click(label=0)
+
+# Type into username field [1]
+Type(text="john@example.com", label=1)
+
+# Scroll news feed [5]
+Scroll(label=5, direction="down", wheel_times=3)
+```
+
+### Label Resolution
+
+```python
+def get_coordinates_from_label(self, label: int) -> tuple[int, int]:
+    tree_state = self.desktop_state.tree_state
+    
+    # Interactive elements [0..N-1]
+    if label < len(tree_state.interactive_nodes):
+        element_node = tree_state.interactive_nodes[label]
+    else:
+        # Scrollable elements [N..M]
+        scroll_idx = label - len(tree_state.interactive_nodes)
+        if scroll_idx < len(tree_state.scrollable_nodes):
+            element_node = tree_state.scrollable_nodes[scroll_idx]
+        else:
+            raise IndexError(f"Label {label} out of range")
+    
+    return element_node.center.x, element_node.center.y
+```
+
+<Note>
+Labels are **ephemeral** — they only exist for the current `DesktopState`. After calling `Snapshot` again, labels may change if the UI has changed.
+</Note>
+
+### Fuzzy Name Matching
+
+The `App` tool uses fuzzy string matching to find applications:
+
+```python
+from fuzzywuzzy import process
+
+def launch_app(self, name: str) -> tuple[str, int, int]:
+    apps_map = self.get_apps_from_start_menu()  # {"notepad": "notepad.exe", ...}
+    
+    # Fuzzy match with 70% threshold
+    matched_app = process.extractOne(name, apps_map.keys(), score_cutoff=70)
+    
+    if matched_app is None:
+        return (f"{name.title()} not found in start menu.", 1, 0)
+    
+    app_name, score = matched_app
+    appid = apps_map[app_name]
+    # Launch app...
+```
+
+This allows:
+- `App(mode="launch", name="note")` → Launches Notepad
+- `App(mode="launch", name="chrome")` → Launches Google Chrome
+- `App(mode="launch", name="vscode")` → Launches Visual Studio Code
+
+## Browser DOM Extraction
+
+Browsers expose web pages via UIA with a special `RootWebArea` element:
+
+```
+Window: "Chrome"
+├─ Address Bar
+├─ Back Button
+├─ Forward Button
+├─ RootWebArea (AutomationId="RootWebArea")
+│  ├─ Heading: "Welcome to My Site"
+│  ├─ Paragraph
+│  ├─ Button: "Sign In"
+│  └─ Link: "Learn More"
+└─ Bookmarks Bar
+```
+
+Windows-MCP detects this and enters **DOM mode**:
+
+```python
+if is_browser and child.CachedAutomationId == "RootWebArea":
+    bounding_box = child.CachedBoundingRectangle
+    self.dom_bounding_box = BoundingBox(...)
+    self.dom = child
+    
+    # Enter DOM subtree (left-to-right traversal for reading order)
+    self.tree_traversal(
+        child,
+        window_bounding_box,
+        window_name,
+        is_browser,
+        interactive_nodes=dom_interactive_nodes,  # Separate list
+        scrollable_nodes=scrollable_nodes,
+        is_dom=True,  # Enable DOM mode
+        ...
+    )
+```
+
+**DOM Mode Features**:
+- **Clip to RootWebArea**: Only elements within the web page viewport
+- **Extract Text Content**: Collect informative nodes for `Scrape` tool
+- **Filter Browser UI**: Ignore address bar, tabs, bookmarks
+
+### DOM Correction
+
+Browsers sometimes nest elements incorrectly. Windows-MCP applies corrections:
+
+```python
+def _dom_correction(self, node: Control, dom_interactive_nodes: list, window_name: str):
+    """Fix common browser UI Automation quirks"""
+    
+    # GroupControl with nested link → Extract link
+    if node.CachedControlTypeName == 'GroupControl':
+        dom_interactive_nodes.pop()  # Remove GroupControl
+        
+        if node.CachedIsKeyboardFocusable:
+            # Find first interactive child
+            child = node
+            while child.GetFirstChildControl() is not None:
+                if child.ControlTypeName in INTERACTIVE_CONTROL_TYPE_NAMES:
+                    return None  # Already added
+                child = child.GetFirstChildControl()
+            
+            # Add child as interactive element
+            if child.ControlTypeName == 'TextControl':
+                dom_interactive_nodes.append(TreeElementNode(
+                    name=child.Name.strip(),
+                    control_type=node.CachedLocalizedControlType,
+                    bounding_box=...,
+                    center=...,
+                    window_name=window_name,
+                    metadata={'has_focused': node.CachedHasKeyboardFocus}
+                ))
+```
+
+## Limitations
+
+### Custom Rendering
+
+❌ **Not Detectable**:
+- Game UI (Direct3D/OpenGL rendering)
+- Custom-drawn controls (GDI+)
+- Canvas elements without ARIA
+
+✅ **Workarounds**:
+- Use vision models with `Snapshot(use_vision=True)`
+- Rely on OCR for text extraction (not implemented in Windows-MCP)
+
+### Dynamic Content
+
+UI Automation is **snapshot-based** — it captures the tree at a point in time. Changes require re-capturing:
+
+```python
+# ❌ BAD: Stale labels after UI changes
+Snapshot()  # Labels [0], [1], [2]
+Click(label=0)  # Triggers animation
+Click(label=1)  # May click wrong element!
+
+# ✅ GOOD: Refresh state after UI changes
+Snapshot()  # Labels [0], [1], [2]
+Click(label=0)
+Wait(duration=1)  # Wait for animation
+Snapshot()  # New labels [0], [1], [2]
+Click(label=1)  # Correct target
+```
+
+### Offscreen Elements
+
+Elements outside the viewport are marked `IsOffscreen=True`. Windows-MCP **skips** them to reduce noise, with exceptions:
+- `EditControl`: Always include (may be scrolled into view)
+- Browser `ListItemControl`: Include for web page navigation
+
+### Accessibility Quality
+
+UIA quality depends on the application:
+- **Good**: Windows built-in apps, Microsoft Office, Visual Studio
+- **Fair**: Electron apps (VSCode, Slack, Discord)
+- **Poor**: Legacy apps, games, custom-drawn UI
+
+<Info>
+If an element isn't detected, check if it's accessible to screen readers. Run **Inspect.exe** (Windows SDK tool) to browse the accessibility tree manually.
+</Info>
+
+## Debugging Tools
+
+### Inspect.exe
+
+**Windows SDK tool** for inspecting the accessibility tree:
+
+1. Download [Windows SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/)
+2. Run `Inspect.exe` (usually in `C:\Program Files (x86)\Windows Kits\10\bin\<version>\x64\`)
+3. Hover over UI elements to see their properties
+4. View tree hierarchy in "Navigation" mode
+
+### Logging
+
+Enable debug logging in Windows-MCP:
+
+```python
+import logging
+
+logger = logging.getLogger("windows_mcp.tree.service")
+logger.setLevel(logging.DEBUG)
+```
+
+Outputs:
+- Number of interactive/scrollable nodes per window
+- Failed window handles
+- Traversal time
+
+## Best Practices
+
+1. **Always call Snapshot first**: Establish current UI state before acting
+2. **Use labels when possible**: More reliable than absolute coordinates
+3. **Wait for UI changes**: Add `Wait` after actions that trigger animations
+4. **Handle dynamic content**: Re-capture state when UI changes
+5. **Provide fallbacks**: If label-based action fails, try coordinate-based
+6. **Test accessibility**: Verify elements are detected before deployment

@@ -1,0 +1,334 @@
+---
+title: Limitations
+description: Known limitations, unsupported features, and workarounds for Windows-MCP
+---
+
+## Overview
+
+While Windows-MCP provides powerful Windows automation capabilities, there are some inherent limitations based on the underlying technologies and design decisions. This page documents known limitations and potential workarounds.
+
+## Current Limitations
+
+### 1. Text Selection in Paragraphs
+
+<Warning>
+**Limitation**: Cannot select specific sections of text within a paragraph.
+</Warning>
+
+**Details**: Windows-MCP relies on the Windows UI Automation (UIA) accessibility tree to identify UI elements. When dealing with text content, the accessibility tree typically exposes entire text blocks rather than individual words or character ranges.
+
+**Impact**:
+- Cannot highlight or select partial text in a paragraph
+- Cannot perform operations like "select words 5-10 in this paragraph"
+- Text selection works at the element level, not character/word level
+
+**Workarounds**:
+- Use keyboard shortcuts via the `Shortcut` tool (e.g., `Shift+End` to select to end of line)
+- Use `Click` to position cursor, then `Shortcut` with `Shift+Arrow` keys for manual selection
+- For web content, use the `Scrape` tool to extract text and process it programmatically
+
+**Status**: ⌛ Working on it.
+
+---
+
+### 2. IDE Code Editing
+
+<Warning>
+**Limitation**: `Type-Tool` is not suitable for programming in IDEs.
+</Warning>
+
+**Details**: The `Type` tool types text character-by-character or as a whole string. This approach is not well-suited for code editors that have:
+- Auto-completion popups
+- Auto-closing brackets/quotes
+- Real-time syntax checking
+- Auto-indentation
+- Code formatters that run on keystrokes
+
+These IDE features can interfere with the typing process, leading to malformed code.
+
+**Impact**:
+- Code may not be typed correctly due to IDE auto-completion interference
+- Auto-closing brackets can result in duplicate characters
+- Pasting large code blocks may trigger IDE hangs or slow performance
+- Formatters may reformat code mid-typing, causing corruption
+
+**Workarounds**:
+- Use the `Shell` tool with PowerShell to directly modify files via command-line tools:
+  ```powershell
+  # Write code to file using PowerShell
+  Set-Content -Path "script.py" -Value "print('Hello World')"
+  ```
+- Use the `Clipboard` tool to copy code, then `Shortcut` with `Ctrl+V` to paste:
+  ```python
+  # Set clipboard content
+  clipboard(action="set", content="def hello(): print('world')")
+  # Then use Shortcut to paste
+  shortcut(keys="Ctrl+v")
+  ```
+- Disable IDE auto-complete and auto-formatting features temporarily
+- Use simpler text editors (Notepad, Notepad++) for MCP-driven code editing
+
+**Status**: ⌛ Working on it.
+
+---
+
+### 3. Video Game Automation
+
+<Warning>
+**Limitation**: Windows-MCP cannot be used to play or automate video games.
+</Warning>
+
+**Details**: Video games typically:
+- Use DirectX/OpenGL rendering that bypasses the standard Windows UI
+- Don't expose UI elements through the accessibility tree
+- Require precise real-time input with frame-perfect timing
+- May use anti-cheat systems that detect automation tools
+- Often run in full-screen mode, making UI inspection difficult
+
+**Impact**:
+- The `Snapshot` tool cannot identify in-game UI elements
+- Game controls are not exposed as accessible elements
+- Mouse/keyboard timing is insufficient for real-time gameplay
+- Screenshots may be black or corrupted for full-screen games
+
+**Workarounds**:
+- None. Windows-MCP is not designed for game automation.
+- Consider specialized game automation frameworks if needed
+
+**Status**: Not planned. Windows-MCP is designed for productivity and testing automation, not gaming.
+
+---
+
+## Technical Limitations
+
+### Screenshot Resolution Cap
+
+**Limitation**: Screenshots are capped at 1920x1080 resolution.
+
+**Reason**: To optimize token usage when sending screenshots to LLMs for vision-based analysis.
+
+**Impact**:
+- High-DPI displays (4K, 5K) will have screenshots downscaled
+- Some fine details may be lost in downscaling
+- Text may be less crisp on high-resolution displays
+
+**Workaround**:
+- Use `use_vision=False` in the `Snapshot` tool to disable screenshots when not needed
+- For detailed analysis, use the accessibility tree data which is not resolution-limited
+
+---
+
+### DPI Scaling Behavior
+
+**Limitation**: Coordinate systems may behave unexpectedly with DPI scaling.
+
+**Details**: Windows supports DPI scaling (125%, 150%, etc.) which can affect coordinate calculations. Windows-MCP uses UIAutomation's coordinate system which should be DPI-aware, but edge cases may exist.
+
+**Impact**:
+- Clicks may occasionally miss targets by a few pixels on scaled displays
+- Bounding boxes may not align perfectly with visual appearance
+
+**Workaround**:
+- Set Windows display scaling to 100% (not always practical)
+- Use larger click targets when possible
+- Enable `use_vision=True` in `Snapshot` to help the LLM understand visual layout
+
+---
+
+### Multi-Monitor Support
+
+**Limitation**: Multi-monitor support is present but may have edge cases.
+
+**Details**: Windows-MCP supports multiple displays via the `display` parameter in the `Snapshot` tool, but:
+- Coordinates are in a unified virtual screen space
+- Different monitors may have different DPI settings
+- Virtual desktop assignments may vary per monitor
+
+**Workaround**:
+- Use `display=[0]` or `display=[1]` to focus on specific monitors
+- Be explicit about which monitor you're working with
+- Test multi-monitor workflows in a VM first
+
+---
+
+### Language Support
+
+<Warning>
+**Limitation**: Windows must use English as the default language, or the `App-Tool` should be disabled.
+</Warning>
+
+**Details**: The `App` tool relies on English UI strings to interact with the Windows Start Menu and application launcher. If Windows is configured with a different language:
+- The `App` tool may fail to find applications
+- Window management commands may not work correctly
+
+**Workaround**:
+- Set Windows display language to English
+- OR disable the `App` tool in your MCP configuration
+- Use the `Shell` tool to launch applications via PowerShell:
+  ```powershell
+  Start-Process "notepad.exe"
+  ```
+
+**Status**: Future versions may support additional languages.
+
+---
+
+## Platform Limitations
+
+### Windows Version Support
+
+Windows-MCP supports **Windows 7, 8, 8.1, 10, and 11**. However:
+
+- **Windows 7**: Limited UIAutomation support, some tools may not work correctly
+- **Windows 8/8.1**: Fully supported
+- **Windows 10**: Recommended, full support
+- **Windows 11**: Recommended, full support with virtual desktop tracking
+
+**Limitation**: Windows 7 users may experience reduced functionality.
+
+---
+
+### No macOS or Linux Support
+
+**Limitation**: Windows-MCP is Windows-only and will not work on macOS or Linux.
+
+**Reason**: The underlying technologies (UIAutomation, PyAutoGUI with Windows-specific features, PowerShell) are Windows-exclusive.
+
+**Workaround**:
+- Use Windows-MCP in a Windows VM on macOS/Linux
+- Consider alternative MCP servers for macOS/Linux automation
+
+---
+
+## Performance Limitations
+
+### Action Latency
+
+**Limitation**: Typical latency between actions ranges from 0.2 to 0.9 seconds.
+
+**Factors**:
+- Number of active applications (affects UI tree traversal)
+- System load and CPU availability
+- LLM inference speed
+- Network latency (for remote mode)
+
+**Impact**:
+- Not suitable for time-critical automation (< 100ms requirements)
+- High-frequency actions (e.g., rapid clicking) may have cumulative delays
+
+**Workaround**:
+- Close unnecessary applications to reduce UI tree size
+- Use faster LLMs or local models for quicker responses
+- Batch operations when possible (e.g., `MultiSelect`, `MultiEdit`)
+
+---
+
+### UI Tree Size
+
+**Limitation**: Large UI trees (many open applications/windows) slow down the `Snapshot` tool.
+
+**Reason**: Windows-MCP traverses the entire accessibility tree to identify interactive elements. More windows = more elements = longer traversal time.
+
+**Impact**:
+- Snapshot tool may take 1-2 seconds with many open windows
+- Token usage increases with larger UI trees
+
+**Workaround**:
+- Close unused applications before automation
+- Use `display=[0]` to limit snapshot to a single monitor
+- Use `use_dom=True` for web automation to filter out browser UI
+
+---
+
+## Browser-Specific Limitations
+
+### DOM Mode Browser Support
+
+**Limitation**: `use_dom=True` mode only works with Chrome, Edge, and Firefox.
+
+**Details**: The DOM extraction feature relies on browser-specific accessibility tree structures. Other browsers (Opera, Brave, etc.) may work if they use Chromium-based accessibility, but are not officially tested.
+
+**Workaround**:
+- Use Chrome, Edge, or Firefox for web automation
+- Use the `Scrape` tool as a fallback for unsupported browsers
+
+---
+
+## Tool-Specific Limitations
+
+### Shell Tool Security
+
+**Limitation**: The `Shell` tool can execute arbitrary PowerShell commands without restrictions.
+
+**Security Risk**: This is inherently dangerous and can lead to data loss or system compromise.
+
+**Mitigation**:
+- Review the [Security](/resources/security) documentation
+- Run Windows-MCP in a VM or sandbox environment
+- Monitor `Shell` tool usage closely
+- Consider disabling the `Shell` tool for untrusted use cases
+
+---
+
+### Scrape Tool Limitations
+
+**Limitation**: The `Scrape` tool fetches web content but does not execute JavaScript.
+
+**Details**: Scrape uses `httpx` to fetch raw HTML. It does not:
+- Execute JavaScript
+- Render dynamic content (React, Vue, etc.)
+- Handle SPA (Single Page Application) navigation
+- Bypass bot detection or CAPTCHAs
+
+**Workaround**:
+- Use `Snapshot` with `use_dom=True` for JavaScript-heavy sites (requires browser)
+- Open the website in a browser, then use `Snapshot` to extract rendered content
+
+---
+
+### Clipboard Tool Timing
+
+**Limitation**: Clipboard operations may fail if another application is accessing the clipboard simultaneously.
+
+**Details**: Windows clipboard access is single-threaded. If another app has the clipboard locked, Windows-MCP's clipboard operation will fail.
+
+**Workaround**:
+- Retry clipboard operations on failure
+- Close applications known to monitor the clipboard (e.g., clipboard managers)
+
+---
+
+## Workaround Summary
+
+Here's a quick reference of workarounds for common limitations:
+
+| Limitation | Workaround |
+|------------|------------|
+| Text selection | Use `Shortcut` with Shift+Arrow keys |
+| IDE code editing | Use `Shell` tool to write files directly |
+| Video games | Not supported, use specialized tools |
+| Non-English Windows | Set Windows language to English or disable `App` tool |
+| High-DPI displays | Set scaling to 100% or use accessibility tree data |
+| Large UI trees | Close unused applications, limit to single display |
+| JavaScript websites | Use browser + `Snapshot` with `use_dom=True` |
+| Clipboard conflicts | Close clipboard managers, retry on failure |
+
+---
+
+## Feature Requests
+
+If you have a use case that is blocked by a limitation, please:
+
+- Open an issue on [GitHub](https://github.com/CursorTouch/Windows-MCP/issues)
+- Join our [Discord Community](https://discord.com/invite/Aue9Yj2VzS) to discuss
+- Contribute a PR if you have a solution
+
+We actively prioritize improvements based on community feedback.
+
+---
+
+## Disclaimer
+
+<Note>
+Windows-MCP is under active development. Limitations are subject to change as new features are added and underlying technologies evolve. Check this page regularly for updates.
+</Note>

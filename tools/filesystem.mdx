@@ -1,0 +1,306 @@
+---
+title: FileSystem
+description: Manage files and directories with comprehensive file system operations
+---
+
+The FileSystem tool provides safe, structured file operations as an alternative to raw PowerShell commands. It supports reading, writing, copying, moving, deleting, listing, searching, and inspecting files and directories.
+
+## Overview
+
+FileSystem offers eight modes for different file operations:
+- **read** - Read text file contents with optional pagination
+- **write** - Create or modify files with append support
+- **copy** - Copy files or directories
+- **move** - Move or rename files and directories
+- **delete** - Remove files or directories
+- **list** - List directory contents with filtering
+- **search** - Find files using glob patterns
+- **info** - Get detailed file/directory metadata
+
+<Note>
+  Relative paths are automatically resolved from the user's Desktop folder. Use absolute paths to access other locations.
+</Note>
+
+## Parameters
+
+<ParamField path="mode" type="string" required>
+  Operation mode to perform.
+  
+  Options: `read`, `write`, `copy`, `move`, `delete`, `list`, `search`, `info`
+</ParamField>
+
+<ParamField path="path" type="string" required>
+  File or directory path. Relative paths resolve from Desktop.
+  
+  **Example:** `Documents/report.txt` or `C:\Users\Public\data.csv`
+</ParamField>
+
+<ParamField path="destination" type="string">
+  Target path for copy/move operations. Required for `copy` and `move` modes.
+</ParamField>
+
+<ParamField path="content" type="string">
+  Text content to write. Required for `write` mode.
+</ParamField>
+
+<ParamField path="pattern" type="string">
+  - For `list` mode: Filter pattern (e.g., `*.txt`)
+  - For `search` mode: Glob pattern (e.g., `**/*.py`). Required for search.
+</ParamField>
+
+<ParamField path="recursive" type="boolean" default="false">
+  - For `delete`: Allow deleting non-empty directories
+  - For `list`: List subdirectories recursively
+  - For `search`: Search in subdirectories (default: true for search)
+</ParamField>
+
+<ParamField path="append" type="boolean" default="false">
+  For `write` mode: Append content instead of overwriting.
+</ParamField>
+
+<ParamField path="overwrite" type="boolean" default="false">
+  For `copy`/`move`: Allow replacing existing destination files.
+</ParamField>
+
+<ParamField path="offset" type="integer">
+  For `read` mode: Starting line number (1-based) for pagination.
+</ParamField>
+
+<ParamField path="limit" type="integer">
+  For `read` mode: Maximum number of lines to read.
+</ParamField>
+
+<ParamField path="encoding" type="string" default="utf-8">
+  Text encoding for read/write operations.
+</ParamField>
+
+<ParamField path="show_hidden" type="boolean" default="false">
+  For `list` mode: Include hidden files (starting with `.`).
+</ParamField>
+
+## Return Values
+
+- **Success:** Confirmation message with operation details
+- **Error:** Descriptive error message with failure reason
+
+## Examples
+
+### Reading Files
+
+```python
+# Read entire file
+FileSystem(
+    mode="read",
+    path="notes.txt"
+)
+
+# Read specific lines (pagination)
+FileSystem(
+    mode="read",
+    path="logs/server.log",
+    offset=100,
+    limit=50
+)
+```
+
+### Writing Files
+
+```python
+# Create new file
+FileSystem(
+    mode="write",
+    path="report.txt",
+    content="Report summary: All tests passed."
+)
+
+# Append to existing file
+FileSystem(
+    mode="write",
+    path="logs/activity.log",
+    content="[2024-03-13] User logged in\n",
+    append=True
+)
+```
+
+### Copying and Moving
+
+```python
+# Copy file
+FileSystem(
+    mode="copy",
+    path="data.csv",
+    destination="backup/data.csv"
+)
+
+# Copy entire directory
+FileSystem(
+    mode="copy",
+    path="project",
+    destination="project-backup"
+)
+
+# Rename file
+FileSystem(
+    mode="move",
+    path="old_name.txt",
+    destination="new_name.txt"
+)
+```
+
+### Deleting
+
+```python
+# Delete file
+FileSystem(
+    mode="delete",
+    path="temp.txt"
+)
+
+# Delete non-empty directory
+FileSystem(
+    mode="delete",
+    path="temp_folder",
+    recursive=True
+)
+```
+
+### Listing Contents
+
+```python
+# List directory
+FileSystem(
+    mode="list",
+    path="Documents"
+)
+
+# List with filter
+FileSystem(
+    mode="list",
+    path="Downloads",
+    pattern="*.pdf"
+)
+
+# Recursive listing
+FileSystem(
+    mode="list",
+    path="Projects",
+    recursive=True
+)
+```
+
+### Searching Files
+
+```python
+# Find all Python files
+FileSystem(
+    mode="search",
+    path="C:\\Projects",
+    pattern="**/*.py"
+)
+
+# Find in current directory only
+FileSystem(
+    mode="search",
+    path=".",
+    pattern="*.txt",
+    recursive=False
+)
+```
+
+### Getting File Info
+
+```python
+# Get detailed metadata
+FileSystem(
+    mode="info",
+    path="document.docx"
+)
+# Returns: type, size, created, modified, accessed, read-only status
+```
+
+## Common Patterns
+
+### Safe File Reading
+
+```python
+# Always check file info first for large files
+FileSystem(mode="info", path="large_file.log")
+
+# Use pagination for large files
+FileSystem(
+    mode="read",
+    path="large_file.log",
+    offset=1,
+    limit=100
+)
+```
+
+### Creating Backup Workflows
+
+```python
+# 1. Get file info
+FileSystem(mode="info", path="important.db")
+
+# 2. Copy with timestamp
+FileSystem(
+    mode="copy",
+    path="important.db",
+    destination="backups/important_2024-03-13.db"
+)
+```
+
+### Batch Operations
+
+```python
+# 1. Search for files
+FileSystem(
+    mode="search",
+    path="Downloads",
+    pattern="*.tmp"
+)
+
+# 2. Delete found files individually
+FileSystem(
+    mode="delete",
+    path="Downloads/file1.tmp"
+)
+```
+
+## Limitations
+
+<Warning>
+  **File Size Limit:** Read operations are capped at 10 MB per file. Use `offset` and `limit` parameters for larger files, or use the PowerShell tool for advanced operations.
+</Warning>
+
+<Warning>
+  **Result Limit:** List and search operations return a maximum of 500 results to avoid context overflow.
+</Warning>
+
+## Error Handling
+
+**Common Errors:**
+- `File not found` - Path doesn't exist
+- `Permission denied` - Insufficient access rights
+- `File too large` - Exceeds 10 MB limit for read
+- `Directory is not empty` - Delete requires `recursive=True`
+- `Destination already exists` - Copy/move requires `overwrite=True`
+
+## Best Practices
+
+<Tip>
+  **Use `info` mode first** to check file size and type before reading or processing.
+</Tip>
+
+<Tip>
+  **Prefer relative paths** for user documents (auto-resolves from Desktop).
+</Tip>
+
+<Tip>
+  **Always set `recursive=True`** explicitly when deleting directories to prevent accidents.
+</Tip>
+
+## Related Tools
+
+- [PowerShell](/tools/shell) - For advanced file operations and scripting
+- [Scrape](/tools/scrape) - For downloading web content
+- [Clipboard](/tools/clipboard) - For copying file paths and content

@@ -1,0 +1,493 @@
+---
+title: Browser Automation
+description: Guide for automating web browsers with DOM mode and web scraping
+---
+
+Windows-MCP provides powerful browser automation capabilities through DOM mode and web scraping tools. This guide covers how to effectively automate web browsers and extract content from web pages.
+
+## DOM Mode Overview
+
+DOM mode is a special mode of the `Snapshot` tool that focuses exclusively on web page content, filtering out browser UI elements for cleaner, more efficient web automation.
+
+### When to Use DOM Mode
+
+- **Web scraping and data extraction**: Extract structured content from web pages
+- **Form automation**: Fill out web forms programmatically
+- **Content verification**: Check if specific content exists on a page
+- **Web testing**: Automate browser-based QA workflows
+
+### How DOM Mode Works
+
+Windows-MCP automatically detects browser windows (Chrome, Edge, Firefox) and can extract DOM information directly from the accessibility tree instead of treating the browser as a regular application.
+
+<Note>
+DOM mode extracts web page elements only—browser UI elements like address bars, tabs, and toolbars are filtered out.
+</Note>
+
+## Using Snapshot with DOM Mode
+
+The `Snapshot` tool with `use_dom=True` captures the current state of the active browser tab.
+
+### Basic DOM Snapshot
+
+<Steps>
+  <Step title="Open a web page">
+    First, ensure the target web page is open in a supported browser (Chrome, Edge, or Firefox).
+  </Step>
+
+  <Step title="Take a DOM snapshot">
+    Call the Snapshot tool with `use_dom=True`:
+
+    ```json
+    {
+      "tool": "Snapshot",
+      "arguments": {
+        "use_dom": true
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Analyze the results">
+    The snapshot returns:
+    - Interactive elements (buttons, links, input fields) with coordinates
+    - Scrollable areas
+    - Text content from the page
+    - Current scroll position
+  </Step>
+</Steps>
+
+### DOM Mode Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `use_dom` | boolean | `false` | Enable DOM mode for browser content extraction |
+| `use_vision` | boolean | `false` | Include screenshot with the DOM data |
+| `use_annotation` | boolean | `true` | Draw bounding boxes on UI elements in screenshot |
+| `display` | array | `null` | Limit snapshot to specific displays (e.g., `[0]` or `[0,1]`) |
+
+### Example: DOM Snapshot with Vision
+
+```json
+{
+  "tool": "Snapshot",
+  "arguments": {
+    "use_dom": true,
+    "use_vision": true,
+    "use_annotation": true
+  }
+}
+```
+
+This captures both the DOM structure and a screenshot with bounding boxes around interactive elements.
+
+<Warning>
+DOM mode requires `use_ui_tree=True` (default). Setting `use_ui_tree=False` will cause an error if `use_dom=True`.
+</Warning>
+
+## Web Scraping with the Scrape Tool
+
+The `Scrape` tool provides two methods for extracting web content:
+
+### Method 1: HTTP Request (Default)
+
+By default, the Scrape tool performs a lightweight HTTP request to fetch page content.
+
+```json
+{
+  "tool": "Scrape",
+  "arguments": {
+    "url": "https://example.com"
+  }
+}
+```
+
+**Advantages:**
+- Fast and lightweight
+- No browser required
+- Works for most static content
+
+**Limitations:**
+- Cannot handle JavaScript-rendered content
+- Blocked by some sites with anti-bot measures
+- No access to authenticated sessions
+
+### Method 2: DOM Extraction
+
+When sites block HTTP requests or require JavaScript, use DOM extraction:
+
+<Steps>
+  <Step title="Open the page in a browser">
+    Navigate to the target URL in Chrome, Edge, or Firefox.
+  </Step>
+
+  <Step title="Scrape using DOM mode">
+    ```json
+    {
+      "tool": "Scrape",
+      "arguments": {
+        "url": "https://example.com",
+        "use_dom": true
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+**Advantages:**
+- Works with JavaScript-rendered content
+- Bypasses anti-bot measures
+- Access to authenticated sessions
+- Accurate representation of what the user sees
+
+### Focused Extraction with Query
+
+Use the `query` parameter to extract specific information:
+
+```json
+{
+  "tool": "Scrape",
+  "arguments": {
+    "url": "https://news.example.com",
+    "query": "article title and publication date"
+  }
+}
+```
+
+The LLM will process the scraped content and focus on extracting the requested information.
+
+### Raw Content Extraction
+
+Disable LLM processing to get raw content:
+
+```json
+{
+  "tool": "Scrape",
+  "arguments": {
+    "url": "https://example.com",
+    "use_sampling": false
+  }
+}
+```
+
+<Note>
+By default, `use_sampling=true` processes content through an LLM to remove boilerplate (navigation, ads, footers) and return clean, concise information.
+</Note>
+
+## Browser Interaction Patterns
+
+### Form Filling Workflow
+
+<Steps>
+  <Step title="Take a DOM snapshot">
+    ```json
+    {
+      "tool": "Snapshot",
+      "arguments": {"use_dom": true}
+    }
+    ```
+  </Step>
+
+  <Step title="Identify input fields">
+    Look for input fields in the interactive elements list. Each element has a label/id and coordinates.
+  </Step>
+
+  <Step title="Fill fields using Type tool">
+    ```json
+    {
+      "tool": "Type",
+      "arguments": {
+        "label": 42,
+        "text": "user@example.com",
+        "clear": true
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Submit the form">
+    ```json
+    {
+      "tool": "Click",
+      "arguments": {
+        "label": 56
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+### Multi-Field Form Automation
+
+Use `MultiEdit` for efficient multi-field forms:
+
+```json
+{
+  "tool": "MultiEdit",
+  "arguments": {
+    "labels": [
+      [42, "John Doe"],
+      [43, "john@example.com"],
+      [44, "555-0123"]
+    ]
+  }
+}
+```
+
+### Scrolling Through Content
+
+<Steps>
+  <Step title="Check scroll position">
+    The DOM snapshot includes scroll position information:
+    ```
+    Reached top
+    [content]
+    Scroll down to see more
+    ```
+  </Step>
+
+  <Step title="Scroll to load more content">
+    ```json
+    {
+      "tool": "Scroll",
+      "arguments": {
+        "label": 78,
+        "direction": "down",
+        "wheel_times": 3
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Take another snapshot">
+    ```json
+    {
+      "tool": "Snapshot",
+      "arguments": {"use_dom": true}
+    }
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+One wheel increment (`wheel_times=1`) scrolls approximately 3-5 lines. Adjust based on how much content you need to scroll.
+</Tip>
+
+### Navigating Between Pages
+
+```json
+// Click a link
+{
+  "tool": "Click",
+  "arguments": {
+    "label": 99
+  }
+}
+
+// Wait for page to load
+{
+  "tool": "Wait",
+  "arguments": {
+    "duration": 2
+  }
+}
+
+// Take a new snapshot
+{
+  "tool": "Snapshot",
+  "arguments": {
+    "use_dom": true
+  }
+}
+```
+
+## Advanced Techniques
+
+### Handling Dynamic Content
+
+For JavaScript-heavy sites with dynamic content loading:
+
+<Steps>
+  <Step title="Perform initial action">
+    Click a button or scroll to trigger content loading.
+  </Step>
+
+  <Step title="Wait for content to load">
+    ```json
+    {
+      "tool": "Wait",
+      "arguments": {"duration": 2}
+    }
+    ```
+  </Step>
+
+  <Step title="Take a fresh snapshot">
+    ```json
+    {
+      "tool": "Snapshot",
+      "arguments": {"use_dom": true}
+    }
+    ```
+  </Step>
+</Steps>
+
+### Multi-Tab Workflows
+
+To work with multiple browser tabs:
+
+1. Use the `App` tool with mode `switch` to switch between browser windows/tabs
+2. Take a DOM snapshot to verify you're on the correct tab
+3. Perform your automation actions
+4. Switch to the next tab and repeat
+
+```json
+// Switch to a browser window
+{
+  "tool": "App",
+  "arguments": {
+    "mode": "switch",
+    "name": "Product Details - Chrome"
+  }
+}
+
+// Verify with snapshot
+{
+  "tool": "Snapshot",
+  "arguments": {"use_dom": true}
+}
+```
+
+### Extracting Tables and Structured Data
+
+<Steps>
+  <Step title="Take a DOM snapshot">
+    ```json
+    {
+      "tool": "Snapshot",
+      "arguments": {"use_dom": true}
+    }
+    ```
+  </Step>
+
+  <Step title="Use Scrape with a focused query">
+    ```json
+    {
+      "tool": "Scrape",
+      "arguments": {
+        "url": "https://example.com/data",
+        "use_dom": true,
+        "query": "Extract all rows from the pricing table"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always start with a DOM snapshot">
+    Before interacting with a page, take a snapshot to understand the current state and identify element labels/coordinates.
+  </Accordion>
+
+  <Accordion title="Use labels instead of coordinates">
+    Element labels are more reliable than hardcoded coordinates, as they adapt to dynamic content and different screen sizes.
+  </Accordion>
+
+  <Accordion title="Add appropriate wait times">
+    After navigation or dynamic content loading, add `Wait` tool calls (typically 1-3 seconds) to ensure content is ready.
+  </Accordion>
+
+  <Accordion title="Handle scroll indicators">
+    Check for "Scroll down to see more" or "Reached bottom" messages in the snapshot to determine if more content is available.
+  </Accordion>
+
+  <Accordion title="Combine with vision when needed">
+    For complex layouts or verification tasks, use `use_vision=true` along with DOM mode to see exactly what the automation is doing.
+  </Accordion>
+
+  <Accordion title="Use query parameters for focused extraction">
+    When scraping, provide specific queries to reduce token usage and get more relevant results.
+  </Accordion>
+</AccordionGroup>
+
+## Common Pitfalls
+
+<Warning>
+**Problem**: DOM snapshot returns "No DOM information found"
+
+**Solution**: Ensure the browser window is the active window and a web page is loaded. Use the `App` tool to switch to the browser if needed.
+</Warning>
+
+<Warning>
+**Problem**: Elements are not clickable or coordinates are wrong
+
+**Solution**: Use element labels instead of hardcoded coordinates. Labels automatically resolve to the correct coordinates based on the current DOM state.
+</Warning>
+
+<Warning>
+**Problem**: Content is incomplete or cut off
+
+**Solution**: Check the scroll position indicators. If you see "Scroll down to see more", use the `Scroll` tool to load additional content before scraping.
+</Warning>
+
+## Example: Complete Web Scraping Workflow
+
+Here's a complete example of scraping product information from an e-commerce site:
+
+```json
+// 1. Navigate to the product page (already open in browser)
+
+// 2. Take a DOM snapshot to see the page structure
+{
+  "tool": "Snapshot",
+  "arguments": {
+    "use_dom": true,
+    "use_vision": true
+  }
+}
+
+// 3. Scroll to load all product details
+{
+  "tool": "Scroll",
+  "arguments": {
+    "direction": "down",
+    "wheel_times": 5
+  }
+}
+
+// 4. Wait for dynamic content to load
+{
+  "tool": "Wait",
+  "arguments": {
+    "duration": 2
+  }
+}
+
+// 5. Scrape specific product information
+{
+  "tool": "Scrape",
+  "arguments": {
+    "url": "https://shop.example.com/product/12345",
+    "use_dom": true,
+    "query": "product name, price, description, and availability"
+  }
+}
+```
+
+## Related Tools
+
+<CardGroup cols={2}>
+  <Card title="Snapshot Tool" icon="camera" href="/tools/snapshot">
+    Complete reference for the Snapshot tool
+  </Card>
+  <Card title="Scrape Tool" icon="spider" href="/tools/scrape">
+    Full documentation for web scraping
+  </Card>
+  <Card title="Type Tool" icon="keyboard" href="/tools/type">
+    Learn about typing text into input fields
+  </Card>
+  <Card title="Click Tool" icon="hand-pointer" href="/tools/click">
+    Reference for clicking elements
+  </Card>
+</CardGroup>

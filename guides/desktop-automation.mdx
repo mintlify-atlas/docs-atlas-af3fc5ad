@@ -1,0 +1,850 @@
+---
+title: Desktop Automation
+description: Guide for automating desktop applications and UI interaction patterns
+---
+
+Windows-MCP enables powerful desktop automation through direct Windows UI integration. This guide covers how to effectively automate desktop applications, manage windows, and interact with UI elements.
+
+## Overview
+
+Windows-MCP uses Windows UI Automation (UIA) to interact natively with desktop applications. Unlike traditional computer vision approaches, it works with the accessibility tree, providing precise element identification and interaction.
+
+### Key Capabilities
+
+- **Application management**: Launch, switch, resize, and position windows
+- **UI element interaction**: Click buttons, type into fields, select items
+- **State observation**: Capture complete desktop state including UI elements
+- **Process management**: List and terminate processes
+- **System operations**: Execute PowerShell commands, manage clipboard
+
+## Understanding the Desktop State
+
+Before automating any desktop task, you should understand the current state of the desktop.
+
+### Taking a Snapshot
+
+The `Snapshot` tool captures the complete desktop state:
+
+```json
+{
+  "tool": "Snapshot",
+  "arguments": {
+    "use_vision": true,
+    "use_annotation": true
+  }
+}
+```
+
+The snapshot returns:
+- **Cursor position**: Current mouse coordinates
+- **Active desktop**: Current virtual desktop (Windows 10/11)
+- **Focused window**: The currently active application window
+- **Opened windows**: All visible windows with their properties
+- **Interactive elements**: Buttons, text fields, menus with labels and coordinates
+- **Scrollable elements**: Areas that can be scrolled
+- **Screenshot**: Visual representation with element bounding boxes
+
+<Note>
+Screenshots are automatically capped to 1920x1080 for token efficiency while maintaining readability.
+</Note>
+
+### Snapshot Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `use_vision` | boolean | `false` | Include screenshot with cursor highlight |
+| `use_annotation` | boolean | `true` | Draw bounding boxes around UI elements |
+| `use_ui_tree` | boolean | `true` | Extract interactive and scrollable elements |
+| `display` | array | `null` | Limit snapshot to specific displays (e.g., `[0]`, `[0,1]`) |
+| `width_reference_line` | int | `null` | Add vertical grid lines for spatial reasoning |
+| `height_reference_line` | int | `null` | Add horizontal grid lines for spatial reasoning |
+
+## Application Management
+
+The `App` tool provides three modes for managing applications and windows.
+
+### Launching Applications
+
+<Steps>
+  <Step title="Launch from Start Menu">
+    ```json
+    {
+      "tool": "App",
+      "arguments": {
+        "mode": "launch",
+        "name": "Notepad"
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Wait for application to open">
+    ```json
+    {
+      "tool": "Wait",
+      "arguments": {
+        "duration": 2
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Verify with a snapshot">
+    ```json
+    {
+      "tool": "Snapshot",
+      "arguments": {}
+    }
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+Application names should match their Start Menu entries. Common examples: "Notepad", "Calculator", "File Explorer", "Paint", "Microsoft Edge".
+</Tip>
+
+### Switching Between Windows
+
+Bring a specific window into focus:
+
+```json
+{
+  "tool": "App",
+  "arguments": {
+    "mode": "switch",
+    "name": "Document.docx - Word"
+  }
+}
+```
+
+<Note>
+Window names typically follow the format: "DocumentName - ApplicationName". Check the snapshot's "Opened Windows" list for exact names.
+</Note>
+
+### Resizing and Positioning Windows
+
+```json
+// Resize the active window
+{
+  "tool": "App",
+  "arguments": {
+    "mode": "resize",
+    "window_size": [800, 600],
+    "window_loc": [100, 100]
+  }
+}
+
+// Resize a specific window by name
+{
+  "tool": "App",
+  "arguments": {
+    "mode": "resize",
+    "name": "Calculator",
+    "window_size": [400, 500],
+    "window_loc": [50, 50]
+  }
+}
+```
+
+Parameters:
+- `window_size`: `[width, height]` in pixels
+- `window_loc`: `[x, y]` position from top-left corner of the screen
+
+<Warning>
+**English Language Requirement**: The `App` tool is optimized for Windows systems with English as the default language. If you're using Windows with another language, consider disabling the App tool or expect potential issues with window title matching.
+</Warning>
+
+## UI Element Interaction
+
+### Using Element Labels
+
+Every interactive element in the snapshot has a unique label (numeric ID). Using labels is more reliable than coordinates.
+
+```json
+// Example snapshot output:
+// Interactive Elements:
+// [42] Button "Submit" at (523, 456)
+// [43] TextBox "Email" at (412, 389)
+
+// Click using label
+{
+  "tool": "Click",
+  "arguments": {
+    "label": 42
+  }
+}
+```
+
+### Click Interactions
+
+<Tabs>
+  <Tab title="Single Click">
+    ```json
+    {
+      "tool": "Click",
+      "arguments": {
+        "label": 42,
+        "button": "left",
+        "clicks": 1
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Double Click">
+    ```json
+    {
+      "tool": "Click",
+      "arguments": {
+        "label": 42,
+        "button": "left",
+        "clicks": 2
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Right Click (Context Menu)">
+    ```json
+    {
+      "tool": "Click",
+      "arguments": {
+        "label": 42,
+        "button": "right",
+        "clicks": 1
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Hover (No Click)">
+    ```json
+    {
+      "tool": "Click",
+      "arguments": {
+        "label": 42,
+        "clicks": 0
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Typing Text
+
+The `Type` tool enters text into input fields:
+
+```json
+{
+  "tool": "Type",
+  "arguments": {
+    "label": 43,
+    "text": "user@example.com",
+    "clear": true,
+    "press_enter": false
+  }
+}
+```
+
+Parameters:
+- `clear`: Clear existing text before typing (default: `false`)
+- `press_enter`: Press Enter after typing (default: `false`)
+- `caret_position`: `"start"`, `"end"`, or `"idle"` (default: `"idle"`)
+
+<Warning>
+The Type tool is designed for entering text into fields, not for programming in IDEs. It types the entire text as a single operation, which may not work well for code editing.
+</Warning>
+
+### Scrolling
+
+```json
+// Scroll at a specific element
+{
+  "tool": "Scroll",
+  "arguments": {
+    "label": 78,
+    "type": "vertical",
+    "direction": "down",
+    "wheel_times": 3
+  }
+}
+
+// Scroll at current mouse position
+{
+  "tool": "Scroll",
+  "arguments": {
+    "type": "vertical",
+    "direction": "up",
+    "wheel_times": 2
+  }
+}
+```
+
+Scroll types:
+- `vertical`: Up/down scrolling
+- `horizontal`: Left/right scrolling
+
+<Tip>
+One wheel increment (`wheel_times=1`) scrolls approximately 3-5 lines. Adjust based on content density.
+</Tip>
+
+### Mouse Movement and Dragging
+
+```json
+// Move cursor to a position
+{
+  "tool": "Move",
+  "arguments": {
+    "label": 99
+  }
+}
+
+// Drag to a position
+{
+  "tool": "Move",
+  "arguments": {
+    "loc": [600, 400],
+    "drag": true
+  }
+}
+```
+
+<Note>
+For drag operations, the cursor moves from its current position to the target coordinates while holding the mouse button down.
+</Note>
+
+## Advanced Interaction Patterns
+
+### Multi-Selection
+
+Select multiple items (files, folders, checkboxes) using `MultiSelect`:
+
+```json
+{
+  "tool": "MultiSelect",
+  "arguments": {
+    "labels": [42, 43, 44, 45],
+    "press_ctrl": true
+  }
+}
+```
+
+With `press_ctrl=true`, items are selected while holding Ctrl (useful for file selection). With `press_ctrl=false`, it performs individual clicks.
+
+### Multi-Field Editing
+
+Fill multiple input fields efficiently with `MultiEdit`:
+
+```json
+{
+  "tool": "MultiEdit",
+  "arguments": {
+    "labels": [
+      [42, "John Doe"],
+      [43, "john@example.com"],
+      [44, "555-0123"],
+      [45, "123 Main St"]
+    ]
+  }
+}
+```
+
+Format: `[[label, text], [label, text], ...]`
+
+### Keyboard Shortcuts
+
+Execute system and application shortcuts:
+
+```json
+// Copy
+{
+  "tool": "Shortcut",
+  "arguments": {
+    "shortcut": "ctrl+c"
+  }
+}
+
+// Paste
+{
+  "tool": "Shortcut",
+  "arguments": {
+    "shortcut": "ctrl+v"
+  }
+}
+
+// Switch applications
+{
+  "tool": "Shortcut",
+  "arguments": {
+    "shortcut": "alt+tab"
+  }
+}
+
+// Open Run dialog
+{
+  "tool": "Shortcut",
+  "arguments": {
+    "shortcut": "win+r"
+  }
+}
+```
+
+Common shortcuts:
+- `ctrl+c`, `ctrl+v`, `ctrl+x`: Copy, paste, cut
+- `ctrl+z`, `ctrl+y`: Undo, redo
+- `alt+tab`: Switch applications
+- `win+r`: Run dialog
+- `win`: Start menu
+- `ctrl+shift+esc`: Task Manager
+- `alt+f4`: Close window
+
+## System Operations
+
+### Clipboard Management
+
+<Tabs>
+  <Tab title="Get Clipboard Content">
+    ```json
+    {
+      "tool": "Clipboard",
+      "arguments": {
+        "mode": "get"
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Set Clipboard Content">
+    ```json
+    {
+      "tool": "Clipboard",
+      "arguments": {
+        "mode": "set",
+        "text": "Hello, World!"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### PowerShell Commands
+
+Execute system commands via PowerShell:
+
+```json
+{
+  "tool": "PowerShell",
+  "arguments": {
+    "command": "Get-ChildItem C:\\Users\\Public -Recurse | Select-Object Name, Length",
+    "timeout": 30
+  }
+}
+```
+
+<Warning>
+The PowerShell tool has full system access and can execute destructive commands. Use with caution and validate commands before execution.
+</Warning>
+
+Common PowerShell examples:
+
+```powershell
+# List files
+Get-ChildItem C:\Users\Public
+
+# Get system information
+Get-ComputerInfo
+
+# Check running processes
+Get-Process | Sort-Object CPU -Descending | Select-Object -First 10
+
+# Network information
+Get-NetIPAddress
+
+# Download a file
+Invoke-WebRequest -Uri "https://example.com/file.txt" -OutFile "C:\Temp\file.txt"
+```
+
+### Process Management
+
+<Tabs>
+  <Tab title="List Processes">
+    ```json
+    {
+      "tool": "Process",
+      "arguments": {
+        "mode": "list",
+        "sort_by": "memory",
+        "limit": 20
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Kill by PID">
+    ```json
+    {
+      "tool": "Process",
+      "arguments": {
+        "mode": "kill",
+        "pid": 12345,
+        "force": true
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Kill by Name">
+    ```json
+    {
+      "tool": "Process",
+      "arguments": {
+        "mode": "kill",
+        "name": "notepad.exe",
+        "force": false
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Sort options: `"memory"`, `"cpu"`, `"name"`
+
+### Windows Notifications
+
+Send toast notifications to the user:
+
+```json
+{
+  "tool": "Notification",
+  "arguments": {
+    "title": "Automation Complete",
+    "message": "The task has finished successfully."
+  }
+}
+```
+
+<Tip>
+Notifications are useful for alerting users when long-running automation tasks complete, especially in remote mode scenarios.
+</Tip>
+
+### Registry Access
+
+Read and write Windows Registry values:
+
+<Tabs>
+  <Tab title="Get Value">
+    ```json
+    {
+      "tool": "Registry",
+      "arguments": {
+        "mode": "get",
+        "path": "HKCU:\\Software\\MyApp",
+        "name": "Version"
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Set Value">
+    ```json
+    {
+      "tool": "Registry",
+      "arguments": {
+        "mode": "set",
+        "path": "HKCU:\\Software\\MyApp",
+        "name": "Version",
+        "value": "1.0.0",
+        "type": "String"
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="List Keys">
+    ```json
+    {
+      "tool": "Registry",
+      "arguments": {
+        "mode": "list",
+        "path": "HKCU:\\Software\\MyApp"
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Delete">
+    ```json
+    {
+      "tool": "Registry",
+      "arguments": {
+        "mode": "delete",
+        "path": "HKCU:\\Software\\MyApp",
+        "name": "OldSetting"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Registry value types: `String`, `DWord`, `QWord`, `Binary`, `MultiString`, `ExpandString`
+
+<Warning>
+Registry modifications can affect system stability. Always verify paths and values before writing. Use `HKCU` (current user) instead of `HKLM` (local machine) when possible to limit scope.
+</Warning>
+
+## File System Operations
+
+The `FileSystem` tool provides comprehensive file operations:
+
+### Reading Files
+
+```json
+{
+  "tool": "FileSystem",
+  "arguments": {
+    "mode": "read",
+    "path": "document.txt",
+    "offset": 0,
+    "limit": 100,
+    "encoding": "utf-8"
+  }
+}
+```
+
+<Note>
+Relative paths are resolved from the user's Desktop folder. Use absolute paths (e.g., `C:\\Users\\...`) to access other locations.
+</Note>
+
+### Writing Files
+
+```json
+// Create or overwrite
+{
+  "tool": "FileSystem",
+  "arguments": {
+    "mode": "write",
+    "path": "output.txt",
+    "content": "Hello, World!",
+    "append": false
+  }
+}
+
+// Append to existing file
+{
+  "tool": "FileSystem",
+  "arguments": {
+    "mode": "write",
+    "path": "log.txt",
+    "content": "New log entry\n",
+    "append": true
+  }
+}
+```
+
+### Other File Operations
+
+<AccordionGroup>
+  <Accordion title="List Directory">
+    ```json
+    {
+      "tool": "FileSystem",
+      "arguments": {
+        "mode": "list",
+        "path": "C:\\Users\\Public",
+        "pattern": "*.txt",
+        "recursive": false,
+        "show_hidden": false
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Search Files">
+    ```json
+    {
+      "tool": "FileSystem",
+      "arguments": {
+        "mode": "search",
+        "path": "C:\\Projects",
+        "pattern": "*.py",
+        "recursive": true
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Copy File/Directory">
+    ```json
+    {
+      "tool": "FileSystem",
+      "arguments": {
+        "mode": "copy",
+        "path": "source.txt",
+        "destination": "backup.txt",
+        "overwrite": true
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Move/Rename">
+    ```json
+    {
+      "tool": "FileSystem",
+      "arguments": {
+        "mode": "move",
+        "path": "old_name.txt",
+        "destination": "new_name.txt",
+        "overwrite": false
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Delete">
+    ```json
+    {
+      "tool": "FileSystem",
+      "arguments": {
+        "mode": "delete",
+        "path": "temp_file.txt",
+        "recursive": false
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Get File Info">
+    ```json
+    {
+      "tool": "FileSystem",
+      "arguments": {
+        "mode": "info",
+        "path": "document.pdf"
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always start with a snapshot">
+    Before any desktop interaction, take a snapshot to understand the current state, identify windows, and locate UI elements.
+  </Accordion>
+
+  <Accordion title="Use labels over coordinates">
+    Element labels adapt to dynamic UIs and different screen resolutions. Hardcoded coordinates can break easily.
+  </Accordion>
+
+  <Accordion title="Add wait times appropriately">
+    After launching applications, clicking buttons, or loading content, use the `Wait` tool (typically 1-3 seconds) to ensure the UI is ready.
+  </Accordion>
+
+  <Accordion title="Handle multi-monitor setups">
+    Use the `display` parameter in Snapshot to focus on specific monitors: `display=[0]` for primary, `display=[0,1]` for multiple.
+  </Accordion>
+
+  <Accordion title="Validate before destructive operations">
+    Before deleting files, killing processes, or modifying the registry, verify the target using list/get operations first.
+  </Accordion>
+
+  <Accordion title="Use keyboard shortcuts when available">
+    Shortcuts like `ctrl+s` (save) or `ctrl+o` (open) are often more reliable than clicking menu items.
+  </Accordion>
+</AccordionGroup>
+
+## Performance Characteristics
+
+Typical latency between actions (e.g., from one click to the next) ranges from **0.2 to 0.9 seconds**, varying based on:
+- Number of active applications
+- System load
+- LLM inference speed
+- Network latency (for remote mode)
+
+<Tip>
+For time-critical operations, minimize the number of snapshot calls and use direct coordinates when element positions are known and stable.
+</Tip>
+
+## Example: Complete Desktop Workflow
+
+Here's a complete example of opening Notepad, typing content, and saving a file:
+
+```json
+// 1. Launch Notepad
+{
+  "tool": "App",
+  "arguments": {
+    "mode": "launch",
+    "name": "Notepad"
+  }
+}
+
+// 2. Wait for application to open
+{
+  "tool": "Wait",
+  "arguments": {"duration": 2}
+}
+
+// 3. Take a snapshot to verify and find elements
+{
+  "tool": "Snapshot",
+  "arguments": {}
+}
+
+// 4. Type content (assuming text area has label 42)
+{
+  "tool": "Type",
+  "arguments": {
+    "label": 42,
+    "text": "This is my document content.\nSecond line here."
+  }
+}
+
+// 5. Save with Ctrl+S
+{
+  "tool": "Shortcut",
+  "arguments": {"shortcut": "ctrl+s"}
+}
+
+// 6. Wait for Save dialog
+{
+  "tool": "Wait",
+  "arguments": {"duration": 1}
+}
+
+// 7. Take snapshot to find Save dialog elements
+{
+  "tool": "Snapshot",
+  "arguments": {}
+}
+
+// 8. Type filename (assuming filename field has label 78)
+{
+  "tool": "Type",
+  "arguments": {
+    "label": 78,
+    "text": "my_document.txt",
+    "clear": true,
+    "press_enter": true
+  }
+}
+```
+
+## Related Tools
+
+<CardGroup cols={2}>
+  <Card title="All Tools Reference" icon="toolbox" href="/tools/overview">
+    Complete reference for all 15 Windows-MCP tools
+  </Card>
+  <Card title="Browser Automation" icon="browser" href="/guides/browser-automation">
+    Specialized guide for web browser automation
+  </Card>
+  <Card title="Remote Mode" icon="cloud" href="/guides/remote-mode">
+    Run Windows automation remotely with VMs
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Common issues and solutions
+  </Card>
+</CardGroup>

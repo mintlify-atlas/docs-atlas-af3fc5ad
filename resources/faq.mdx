@@ -1,0 +1,590 @@
+---
+title: FAQ
+description: Frequently asked questions about Windows-MCP
+---
+
+Frequently asked questions and answers about using Windows-MCP.
+
+## General Questions
+
+<Accordion title="What is Windows-MCP?">
+Windows-MCP is a Model Context Protocol (MCP) server that enables AI LLM agents to interact with Windows operating systems. It provides 15+ tools for automating desktop tasks like clicking, typing, launching apps, executing PowerShell commands, and more.
+
+Think of it as a bridge between AI assistants (like Claude, ChatGPT, or Gemini) and your Windows desktop, allowing them to control your computer on your behalf.
+</Accordion>
+
+<Accordion title="Which LLM clients can I use with Windows-MCP?">
+Windows-MCP works with any MCP-compatible client, including:
+
+- **Claude Desktop** (most popular)
+- **Perplexity Desktop**
+- **Gemini CLI**
+- **Qwen Code**
+- **Codex CLI**
+- **Custom MCP clients** built with the MCP SDK
+
+As long as the client supports the Model Context Protocol standard, it can connect to Windows-MCP.
+</Accordion>
+
+<Accordion title="Does Windows-MCP require a specific LLM model?">
+No! Unlike some automation tools, Windows-MCP works with **any LLM** - it doesn't require vision models or specific fine-tuned models. 
+
+However:
+- Vision models (like Claude 3.5 Sonnet) provide better accuracy when screenshots are enabled
+- You can use non-vision models by setting `use_vision=False` in the Snapshot tool
+
+The `Snapshot` tool uses the Windows accessibility tree to identify UI elements, so vision is optional but helpful.
+</Accordion>
+
+<Accordion title="Is Windows-MCP free and open-source?">
+Yes! Windows-MCP is fully open-source under the **MIT License**. You can:
+
+- Use it for personal or commercial projects
+- Modify the source code
+- Distribute your modifications
+- Review the code for security auditing
+
+The source code is available on [GitHub](https://github.com/CursorTouch/Windows-MCP).
+</Accordion>
+
+## Installation & Setup
+
+<Accordion title="What are the prerequisites for installing Windows-MCP?">
+You need:
+
+1. **Windows 7, 8, 10, or 11** (Windows 10/11 recommended)
+2. **Python 3.13+** installed
+3. **UV package manager** (`pip install uv` or use the Astral installer)
+4. **An MCP client** (e.g., Claude Desktop)
+
+Optional:
+- English as the Windows display language (or disable the `App` tool)
+
+<Note>
+The first installation may take 1-2 minutes as dependencies are installed. The server may timeout on first run - just restart it.
+</Note>
+</Accordion>
+
+<Accordion title="Should I install from PyPI or from source?">
+**For most users: Install from PyPI** (recommended)
+
+This is the easiest method and automatically gets updates:
+```json
+{
+  "command": "uvx",
+  "args": ["windows-mcp"]
+}
+```
+
+**Install from source if:**
+- You want to modify the code
+- You need a specific unreleased feature from the main branch
+- You're contributing to development
+
+For source installation:
+```bash
+git clone https://github.com/CursorTouch/Windows-MCP.git
+cd Windows-MCP
+```
+
+Then use:
+```json
+{
+  "command": "uv",
+  "args": ["--directory", "<path>", "run", "windows-mcp"]
+}
+```
+</Accordion>
+
+<Accordion title="Where is the configuration file for Claude Desktop?">
+The location depends on how you installed Claude Desktop:
+
+**Standard installer (EXE)**:
+```
+%APPDATA%\Claude\claude_desktop_config.json
+```
+(Usually: `C:\Users\<username>\AppData\Roaming\Claude\`)
+
+**Windows Store (MSIX) version**:
+```
+%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json
+```
+
+<Warning>
+The "Edit Config" button in MSIX Claude Desktop may open the wrong file. Manually navigate to the MSIX path above.
+</Warning>
+</Accordion>
+
+<Accordion title="Why does my MCP server fail with 'spawn ENOENT' error?">
+This happens with the MSIX (Windows Store) version of Claude Desktop because Electron apps don't inherit the system PATH.
+
+**Solution**: Use the **full absolute path** to `uv.exe`:
+
+```json
+{
+  "command": "C:\\Users\\<username>\\.local\\bin\\uv.exe",
+  "args": ["windows-mcp"]
+}
+```
+
+To find your `uv.exe` path, run in PowerShell:
+```powershell
+where uv
+```
+
+Common location: `%USERPROFILE%\.local\bin\uv.exe`
+</Accordion>
+
+<Accordion title="Why does the server timeout on first run?">
+The first time you run Windows-MCP, it needs to install dependencies from `pyproject.toml`. This can take 1-2 minutes, which may exceed the default MCP client timeout.
+
+**Solution**:
+1. Wait for the installation to complete (check your terminal/logs)
+2. Restart the MCP client (close and reopen Claude Desktop)
+3. The server should start instantly on subsequent runs
+
+This is a one-time setup step.
+</Accordion>
+
+## Usage & Features
+
+<Accordion title="What tools does Windows-MCP provide?">
+Windows-MCP exposes 15 MCP tools:
+
+**Input Tools**:
+- `Click` - Click at coordinates
+- `Type` - Type text (with optional clear)
+- `Scroll` - Scroll vertically/horizontally
+- `Move` - Move mouse or drag
+- `Shortcut` - Press keyboard shortcuts
+- `MultiSelect` - Select multiple items
+- `MultiEdit` - Edit multiple input fields
+
+**System Tools**:
+- `App` - Launch and manage applications
+- `Shell` - Execute PowerShell commands
+- `Process` - List/terminate processes
+- `Notification` - Send Windows toast notifications
+- `Registry` - Read/write/delete registry keys
+
+**Information Tools**:
+- `Snapshot` - Capture desktop state + screenshots
+- `Scrape` - Fetch web page content
+- `Clipboard` - Read/write clipboard
+- `Wait` - Pause execution
+
+See the [Tools Reference](/tools) for detailed documentation.
+</Accordion>
+
+<Accordion title="How does the Snapshot tool work?">
+The `Snapshot` tool is the primary way for LLMs to "see" your Windows desktop. It provides:
+
+1. **Accessibility tree**: A structured representation of all UI elements (buttons, text fields, etc.) with coordinates
+2. **Screenshots** (optional): Visual capture of your desktop
+3. **Active applications**: List of running apps
+4. **Scrollable elements**: Areas that can be scrolled
+
+**Special modes**:
+- `use_vision=True` - Include screenshots for vision models
+- `use_vision=False` - Text-only (works with any LLM)
+- `use_dom=True` - Extract only web page content (Chrome/Edge/Firefox)
+- `display=[0]` or `display=[0,1]` - Limit to specific monitors
+
+Example:
+```python
+snapshot(use_vision=True, use_dom=False, display=[0])
+```
+</Accordion>
+
+<Accordion title="What is DOM mode and when should I use it?">
+**DOM mode** (`use_dom=True`) is a special mode for browser automation that extracts **only web page content**, filtering out browser UI elements (tabs, address bar, bookmarks, etc.).
+
+**Use DOM mode when:**
+- Automating websites (form filling, testing, scraping)
+- You want cleaner, more focused web element data
+- You need to interact with web pages specifically
+
+**Don't use DOM mode when:**
+- Working with desktop applications
+- You need to interact with browser controls (tabs, address bar)
+- Using non-Chrome/Edge/Firefox browsers
+
+**Supported browsers**: Chrome, Edge, Firefox
+
+Example:
+```python
+snapshot(use_dom=True, use_vision=True)
+```
+</Accordion>
+
+<Accordion title="Can I use Windows-MCP for web scraping?">
+Yes! Windows-MCP provides two approaches:
+
+**1. Scrape tool** (headless, no browser needed):
+```python
+scrape(url="https://example.com")
+```
+- Fast, lightweight
+- Returns raw HTML
+- **Limitation**: Does NOT execute JavaScript
+
+**2. Browser + Snapshot tool** (for JavaScript sites):
+1. Open the website in Chrome/Edge/Firefox
+2. Use `snapshot(use_dom=True)` to extract rendered content
+- Executes JavaScript
+- Works with SPAs (React, Vue, etc.)
+- Can interact with dynamic content
+
+For most modern websites, use approach #2.
+</Accordion>
+
+<Accordion title="How fast is Windows-MCP?">
+Typical latency between actions (e.g., click to next click) ranges from **0.2 to 0.9 seconds**, depending on:
+
+- Number of open applications (more apps = larger UI tree to traverse)
+- System load and CPU availability
+- LLM inference speed
+- Network latency (remote mode)
+
+Windows-MCP is suitable for productivity automation and QA testing, but **not for time-critical tasks** requiring sub-100ms response times.
+
+<Note>
+To improve performance: close unnecessary applications and use faster LLMs.
+</Note>
+</Accordion>
+
+<Accordion title="Can I use Windows-MCP to write code in an IDE?">
+**Short answer**: Not recommended with the `Type` tool.
+
+**Why**: The `Type` tool types text as a whole string, which conflicts with IDE features:
+- Auto-completion popups
+- Auto-closing brackets
+- Real-time syntax checking
+- Auto-formatters
+
+**Workarounds**:
+1. **Use the Shell tool** to write files directly:
+   ```powershell
+   Set-Content -Path "script.py" -Value "print('Hello')"
+   ```
+
+2. **Use Clipboard + paste**:
+   ```python
+   clipboard(action="set", content="code here")
+   shortcut(keys="Ctrl+v")
+   ```
+
+3. **Use simpler text editors** (Notepad, Notepad++) instead of IDEs
+
+<Note>
+This limitation is being worked on. See [Limitations](/resources/limitations) for details.
+</Note>
+</Accordion>
+
+## Security & Safety
+
+<Accordion title="Is Windows-MCP safe to use?">
+Windows-MCP has **full system access** and can perform **irreversible operations**. Safety depends entirely on how and where you deploy it.
+
+**Safe deployment**:
+- ✅ Virtual machines with snapshots
+- ✅ Windows Sandbox
+- ✅ Dedicated test machines
+- ✅ Personal machines with backups
+
+**Unsafe deployment**:
+- ❌ Production servers
+- ❌ Systems with sensitive data
+- ❌ Shared/multi-user systems
+- ❌ Compliance-regulated environments
+
+<Warning>
+Always run Windows-MCP in a VM or sandbox environment first. Review the [Security Policy](/resources/security) before deploying.
+</Warning>
+</Accordion>
+
+<Accordion title="What are the security risks?">
+**High-risk tools** (can be destructive):
+- `Shell` - Can execute arbitrary PowerShell commands
+- `Click` - Can click "Delete", "Yes", "Confirm" buttons
+- `Type` - Can overwrite data when `clear=True`
+- `Shortcut` - Can trigger destructive shortcuts (Ctrl+D, Alt+F4)
+
+**Privacy risks**:
+- `Snapshot` - Screenshots may contain sensitive information
+- `Scrape` - Exposes browsing activity to target websites
+- `Clipboard` - Can read/write clipboard (including passwords if copied)
+
+**Mitigation strategies**:
+1. Run in a VM or sandbox
+2. Use a limited user account (not admin)
+3. Monitor tool usage
+4. Disable high-risk tools when not needed
+5. Use `use_vision=False` to avoid screenshot capture
+
+See the [Security documentation](/resources/security) for comprehensive best practices.
+</Accordion>
+
+<Accordion title="How do I report a security vulnerability?">
+<Warning>
+**DO NOT** open a public GitHub issue for security vulnerabilities.
+</Warning>
+
+**Responsible disclosure process**:
+
+1. **Email**: [jeogeoalukka@gmail.com](mailto:jeogeoalukka@gmail.com)
+2. **GitHub Security Advisory**: [Create an advisory](https://github.com/CursorTouch/Windows-MCP/security/advisories) (preferred)
+
+**Include**:
+- Vulnerability description
+- Reproduction steps
+- Impact assessment
+- Suggested fix (if available)
+
+**Timeline**:
+- Initial response: 48 hours
+- Status update: 7 days
+- Critical fixes: Within 7 days
+
+You will be credited in the security advisory unless you prefer anonymity.
+</Accordion>
+
+<Accordion title="What data does Windows-MCP collect?">
+**Telemetry is enabled by default** but collects only anonymous usage data:
+
+**We collect**:
+- Tool names executed
+- Success/failure status
+- Execution duration
+- Client name and version
+- Anonymous session IDs
+
+**We DO NOT collect**:
+- Tool arguments (text typed, coordinates, commands, etc.)
+- Tool outputs (screenshots, results, scraped content)
+- Personal information (IP, username, email, etc.)
+
+**To disable telemetry**, add to your config:
+```json
+{
+  "env": {
+    "ANONYMIZED_TELEMETRY": "false"
+  }
+}
+```
+
+See [Telemetry](/resources/telemetry) for full details.
+</Accordion>
+
+## Troubleshooting
+
+<Accordion title="Why aren't my clicks working correctly?">
+Common causes:
+
+**1. DPI scaling issues**
+- Windows display scaling (125%, 150%) can affect coordinates
+- Solution: Set display scaling to 100% or use larger click targets
+
+**2. Wrong monitor**
+- Multi-monitor setups use a unified virtual screen space
+- Solution: Use `display=[0]` or `display=[1]` in Snapshot to focus on one monitor
+
+**3. Moving targets**
+- UI elements moved between snapshot and click
+- Solution: Take a fresh snapshot immediately before clicking
+
+**4. Hidden/overlapping elements**
+- Element may be behind another window
+- Solution: Use the `App` tool to bring the target window to front first
+</Accordion>
+
+<Accordion title="Why is the Snapshot tool slow?">
+**Causes**:
+- Too many open applications (large UI tree to traverse)
+- Multiple monitors with many windows
+- Browser with many tabs open
+
+**Solutions**:
+1. Close unnecessary applications
+2. Limit to single monitor: `snapshot(display=[0])`
+3. Use DOM mode for browsers: `snapshot(use_dom=True)`
+4. Disable vision if not needed: `snapshot(use_vision=False)`
+
+**Expected performance**: 0.5-2 seconds depending on system load
+</Accordion>
+
+<Accordion title="Why can't Windows-MCP find my application with the App tool?">
+**Cause**: The `App` tool requires English as the Windows display language.
+
+**Solutions**:
+1. Set Windows language to English:
+   - Settings → Time & Language → Language
+   - Set English as the display language
+
+2. OR disable the App tool and use `Shell` instead:
+   ```python
+   shell(command="Start-Process 'notepad.exe'")
+   ```
+
+3. Use full application paths:
+   ```python
+   shell(command="Start-Process 'C:\\Program Files\\App\\app.exe'")
+   ```
+</Accordion>
+
+<Accordion title="Why does the Shell tool fail with permission errors?">
+The `Shell` tool runs with the same permissions as the user running Windows-MCP.
+
+**If you need admin privileges**:
+1. Run your MCP client (Claude Desktop) as administrator
+2. OR use `Start-Process -Verb RunAs` in PowerShell:
+   ```powershell
+   Start-Process powershell -Verb RunAs -ArgumentList "-Command", "your-command"
+   ```
+
+<Warning>
+Running as admin increases security risks. Only do this in isolated test environments.
+</Warning>
+</Accordion>
+
+<Accordion title="Can I use Windows-MCP on Windows 7?">
+Yes, but with **limited functionality**. Windows 7 has an older version of UI Automation with:
+
+- Fewer accessibility features
+- Less reliable element detection
+- Potentially missing UI patterns
+
+**Recommendation**: Use Windows 10 or 11 for the best experience.
+
+Windows 8/8.1 is fully supported.
+</Accordion>
+
+## Remote Mode & Virtual Machines
+
+<Accordion title="What is Remote Mode?">
+**Remote Mode** allows Windows-MCP to act as a proxy that connects to [windowsmcp.io](https://windowsmcp.io), enabling cloud-hosted Windows automation.
+
+**Use cases**:
+- Run Windows automation from macOS/Linux
+- Access Windows VMs from anywhere
+- Use pre-configured Windows environments
+
+**Configuration**:
+```json
+{
+  "command": "uvx",
+  "args": ["windows-mcp"],
+  "env": {
+    "MODE": "remote",
+    "SANDBOX_ID": "your-sandbox-id",
+    "API_KEY": "your-api-key"
+  }
+}
+```
+
+See [windowsmcp.io](https://windowsmcp.io) for more details.
+</Accordion>
+
+<Accordion title="Can I run Windows-MCP in a VM?">
+**Yes, and this is highly recommended!**
+
+Running in a VM provides:
+- **Safety**: Snapshot and rollback if something goes wrong
+- **Isolation**: No risk to your host machine or production data
+- **Testing**: Safe environment for experimenting
+
+**Recommended VM platforms**:
+- VMware Workstation/Player
+- VirtualBox
+- Hyper-V (built into Windows Pro/Enterprise)
+- Windows Sandbox (lightweight, built into Win10/11)
+
+**Best practices**:
+1. Take a VM snapshot before each session
+2. Isolate the VM network from production
+3. Use VM-specific user accounts
+4. Keep regular backups
+
+See [windowsmcp.io](https://windowsmcp.io) for VM support.
+</Accordion>
+
+<Accordion title="What transport modes are available?">
+Windows-MCP supports three transport modes:
+
+**1. stdio (default)**
+- For direct MCP client connections (Claude Desktop, etc.)
+- No network setup required
+```bash
+uvx windows-mcp
+```
+
+**2. SSE (Server-Sent Events)**
+- Network-accessible via HTTP
+- Suitable for testing and development
+```bash
+uvx windows-mcp --transport sse --host localhost --port 8000
+```
+
+**3. streamable-http**
+- Network-accessible via HTTP streaming
+- Recommended for production network deployments
+```bash
+uvx windows-mcp --transport streamable-http --host localhost --port 8000
+```
+
+<Warning>
+Never expose network transports to the internet without proper authentication and encryption.
+</Warning>
+</Accordion>
+
+## Community & Support
+
+<Accordion title="Where can I get help?">
+**Community channels**:
+- [Discord Community](https://discord.com/invite/Aue9Yj2VzS) - Real-time chat and support
+- [GitHub Issues](https://github.com/CursorTouch/Windows-MCP/issues) - Bug reports and feature requests
+- [GitHub Discussions](https://github.com/CursorTouch/Windows-MCP/discussions) - General questions
+
+**Follow for updates**:
+- [@CursorTouch](https://x.com/CursorTouch) on X (Twitter)
+
+**Email**:
+- [jeogeoalukka@gmail.com](mailto:jeogeoalukka@gmail.com) (security and private inquiries)
+</Accordion>
+
+<Accordion title="How can I contribute to Windows-MCP?">
+Contributions are welcome! You can:
+
+**1. Report bugs**: Open a [GitHub issue](https://github.com/CursorTouch/Windows-MCP/issues)
+
+**2. Request features**: Use [GitHub Discussions](https://github.com/CursorTouch/Windows-MCP/discussions)
+
+**3. Submit code**:
+- Fork the repository
+- Create a feature branch
+- Submit a pull request
+- See [CONTRIBUTING](https://github.com/CursorTouch/Windows-MCP/blob/main/CONTRIBUTING) for guidelines
+
+**4. Improve documentation**:
+- Fix typos or unclear explanations
+- Add examples and use cases
+- Translate to other languages
+
+**5. Share your projects**:
+- Show what you've built with Windows-MCP
+- Write blog posts or tutorials
+- Join the Discord to share ideas
+
+All contributions are recognized in the [Contributors](https://github.com/CursorTouch/Windows-MCP/graphs/contributors) page.
+</Accordion>
+
+<Accordion title="Who maintains Windows-MCP?">
+Windows-MCP is developed and maintained by [CursorTouch](https://github.com/CursorTouch).
+
+**Project stats**:
+- Over 2M+ users in Claude Desktop Extensions
+- Open-source (MIT License)
+- Active community on Discord and GitHub
+
+**Commercial use**: Fully allowed under MIT License, no attribution required (but appreciated!).
+</Accordion>

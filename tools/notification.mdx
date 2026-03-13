@@ -1,0 +1,354 @@
+---
+title: Notification
+description: Send Windows toast notifications to alert users
+---
+
+The Notification tool sends native Windows toast notifications with a title and message. Use it to alert users of completed operations, errors, or important events.
+
+## Overview
+
+Notifications appear in the Windows notification center and as popup toasts on the desktop. They're perfect for:
+- Remote automation feedback
+- Long-running task completion
+- Error alerts
+- Status updates
+
+<Note>
+  Notifications appear immediately and remain in the Action Center until dismissed.
+</Note>
+
+## Parameters
+
+<ParamField path="title" type="string" required>
+  Notification title (bold header text).
+  
+  **Example:** `"Task Complete"` or `"Error Occurred"`
+</ParamField>
+
+<ParamField path="message" type="string" required>
+  Notification body text.
+  
+  **Example:** `"The backup has finished successfully."`
+</ParamField>
+
+## Return Values
+
+Returns a success confirmation:
+```
+Notification sent: "<title>"
+```
+
+Or error:
+```
+Error sending notification: <error details>
+```
+
+## Examples
+
+### Basic Notification
+
+```python
+# Simple success message
+Notification(
+    title="Backup Complete",
+    message="All files have been backed up successfully."
+)
+```
+
+### Error Alert
+
+```python
+# Alert user of error
+Notification(
+    title="Error: Connection Failed",
+    message="Unable to connect to the server. Please check your network connection."
+)
+```
+
+### Task Completion
+
+```python
+# Long-running task finished
+Notification(
+    title="Download Complete",
+    message="report_2024.pdf has been downloaded to your Downloads folder."
+)
+```
+
+### Multi-line Message
+
+```python
+# Structured information
+Notification(
+    title="Report Summary",
+    message="""Total Files: 1,250
+Processed: 1,248
+Failed: 2
+Duration: 5 minutes"""
+)
+```
+
+## Common Patterns
+
+### Automation Completion
+
+```python
+# Run automation
+App(mode="launch", name="excel")
+Wait(duration=3)
+
+# ... perform operations ...
+
+# Notify completion
+Notification(
+    title="Excel Automation Complete",
+    message="Data has been processed and saved."
+)
+```
+
+### Error Handling
+
+```python
+try:
+    # Attempt operation
+    FileSystem(
+        mode="copy",
+        path="important.db",
+        destination="backup/important.db"
+    )
+    
+    Notification(
+        title="Backup Successful",
+        message="Database backed up to backup folder."
+    )
+except Exception as e:
+    Notification(
+        title="Backup Failed",
+        message=f"Error: {str(e)}"
+    )
+```
+
+### Scheduled Task Feedback
+
+```python
+# Start of task
+Notification(
+    title="Scheduled Task Started",
+    message="Beginning nightly data sync..."
+)
+
+# Perform task
+result = PowerShell(command="./sync-script.ps1")
+
+# Report results
+Notification(
+    title="Sync Complete",
+    message=f"Synced 1,500 files. Status: {result}"
+)
+```
+
+### Multi-step Progress
+
+```python
+# Step 1
+Notification(title="Step 1/3", message="Downloading files...")
+Scrape(url="https://data.com/export")
+
+# Step 2
+Notification(title="Step 2/3", message="Processing data...")
+PowerShell(command="./process.ps1")
+
+# Step 3
+Notification(title="Step 3/3", message="Generating report...")
+FileSystem(mode="write", path="report.txt", content="...")
+
+# Complete
+Notification(
+    title="All Steps Complete",
+    message="The workflow finished successfully."
+)
+```
+
+### Remote Monitoring
+
+```python
+# Monitor remote automation
+while condition:
+    # Check status
+    status = check_automation_status()
+    
+    if status == "warning":
+        Notification(
+            title="Warning",
+            message="Automation is running slower than expected."
+        )
+    
+    Wait(duration=60)
+```
+
+### User Prompts
+
+```python
+# Alert user for manual action
+Notification(
+    title="Action Required",
+    message="Please log into the application before continuing."
+)
+
+Wait(duration=30)  # Wait for user
+
+# Continue automation
+Snapshot()
+# ...
+```
+
+## Notification Behavior
+
+### Display Duration
+- **Popup:** 5-7 seconds by default
+- **Action Center:** Persists until dismissed
+
+### Dismissal
+Notifications can be:
+- Auto-dismissed after timeout (popup)
+- Manually dismissed by user
+- Cleared from Action Center
+
+### Priority
+All notifications appear as standard priority. Windows does not support custom priority levels via this API.
+
+## Text Formatting
+
+**Title:**
+- Displayed in **bold**
+- Recommended: 50 characters or less
+- Truncated if too long
+
+**Message:**
+- Regular font weight
+- Supports line breaks (`\n`)
+- Recommended: 200 characters or less
+- Truncated with "..." if too long
+
+```python
+# Good: Concise title
+Notification(
+    title="Backup Complete",
+    message="Backed up 1,250 files (2.5 GB)"
+)
+
+# Bad: Title too long
+Notification(
+    title="The Automated Backup Process Has Successfully Completed",
+    message="..."
+)
+# Title will be truncated
+```
+
+## Best Practices
+
+<Tip>
+  **Use action verbs** in titles: "Complete", "Failed", "Started", "Warning"
+</Tip>
+
+<Tip>
+  **Include key details** in messages: counts, file names, error codes
+</Tip>
+
+<Tip>
+  **Avoid notification spam** - Limit to important events only
+</Tip>
+
+<Warning>
+  **Don't rely on notifications for critical errors** - They can be dismissed or missed. Always log errors properly.
+</Warning>
+
+## Use Cases
+
+### Automation Feedback
+```python
+Notification(
+    title="Automation Complete",
+    message="All tasks finished. Check logs for details."
+)
+```
+
+### File Operations
+```python
+Notification(
+    title="Files Copied",
+    message="Copied 50 files to backup folder."
+)
+```
+
+### System Events
+```python
+Notification(
+    title="Low Disk Space",
+    message="C: drive has less than 10 GB free."
+)
+```
+
+### Scheduled Tasks
+```python
+Notification(
+    title="Daily Report Ready",
+    message="Report generated at 8:00 AM."
+)
+```
+
+## Limitations
+
+- **Text only** - No images, buttons, or interactive elements
+- **No sound control** - Uses system default sound
+- **No action buttons** - Can't add clickable actions
+- **No priority levels** - All notifications treated equally
+- **Not guaranteed** - User may have notifications disabled
+
+<Note>
+  Windows Focus Assist may suppress notifications during certain times or activities.
+</Note>
+
+## Error Handling
+
+```python
+# Success
+"Notification sent: \"Backup Complete\""
+
+# Failure
+"Error sending notification: Access denied"
+"Error sending notification: Notification service unavailable"
+```
+
+## Platform Notes
+
+**Windows 10/11:**
+- Appears as native toast notification
+- Shows in Action Center
+- App icon: Generic Windows icon
+
+**Windows 8.1:**
+- Basic notification support
+- Limited Action Center features
+
+**Windows 7:**
+- Not supported (no toast notifications)
+- Tool will return error
+
+## Performance
+
+Notification delivery:
+- **Latency:** 100-300ms
+- **Non-blocking:** Returns immediately
+- **Overhead:** Negligible
+
+<Tip>
+  Notification is one of the fastest tools. Use it freely without performance concerns.
+</Tip>
+
+## Related Tools
+
+- [Process](/tools/process) - Monitor and manage applications
+- [PowerShell](/tools/shell) - Advanced notification scenarios
+- [FileSystem](/tools/filesystem) - Log events to files
+- [Clipboard](/tools/clipboard) - Copy notification content

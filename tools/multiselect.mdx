@@ -1,0 +1,250 @@
+---
+title: MultiSelect
+description: Select multiple UI elements with Ctrl-click or perform batch clicks
+---
+
+The MultiSelect tool clicks multiple UI elements in sequence, with optional Ctrl key held down for multi-selection workflows. It's perfect for selecting multiple files, checkboxes, or list items.
+
+## Overview
+
+MultiSelect supports two modes:
+1. **Multi-selection mode** (`press_ctrl=True`): Holds Ctrl while clicking each item, allowing multiple selections
+2. **Batch click mode** (`press_ctrl=False`): Performs individual clicks without Ctrl
+
+<Note>
+  Use Snapshot first to identify UI element labels, or provide explicit coordinates.
+</Note>
+
+## Parameters
+
+<ParamField path="locs" type="array">
+  List of coordinate pairs `[[x1, y1], [x2, y2], ...]`.
+  
+  **Example:** `[[100, 200], [150, 250], [200, 300]]`
+</ParamField>
+
+<ParamField path="labels" type="array">
+  List of UI element labels/IDs from Snapshot output.
+  
+  **Example:** `[5, 12, 18]` to select elements with labels 5, 12, and 18
+</ParamField>
+
+<ParamField path="press_ctrl" type="boolean" default="true">
+  Whether to hold Ctrl key during clicks for multi-selection.
+  
+  - `true`: Ctrl+click each item (multi-select)
+  - `false`: Click each item individually
+</ParamField>
+
+<Note>
+  You must provide **either** `locs` or `labels`, but not both.
+</Note>
+
+## Return Values
+
+Returns a confirmation string listing all selected coordinates:
+```
+Multi-selected elements at:
+(100,200)
+(150,250)
+(200,300)
+```
+
+## Examples
+
+### Selecting Multiple Files
+
+```python
+# 1. Take snapshot to see file locations
+Snapshot(use_vision=True, use_annotation=True)
+
+# 2. Select files using labels
+MultiSelect(
+    labels=[5, 7, 9, 12],
+    press_ctrl=True
+)
+# Ctrl+clicks each file for multi-selection
+```
+
+### Selecting Checkboxes
+
+```python
+# Check multiple checkboxes in a form
+MultiSelect(
+    labels=[3, 4, 5],
+    press_ctrl=False  # Individual clicks, not multi-selection
+)
+```
+
+### Using Coordinates
+
+```python
+# Select using explicit coordinates
+MultiSelect(
+    locs=[
+        [250, 300],
+        [250, 350],
+        [250, 400]
+    ],
+    press_ctrl=True
+)
+```
+
+### Selecting List Items
+
+```python
+# Select multiple items in a list box
+Snapshot()
+# Identify list item labels: 10, 11, 12, 13
+
+MultiSelect(
+    labels=[10, 11, 12, 13],
+    press_ctrl=True
+)
+```
+
+## Common Patterns
+
+### Batch File Operations
+
+```python
+# 1. Open File Explorer
+App(mode="launch", name="explorer")
+Wait(duration=2)
+
+# 2. Navigate to folder
+Shortcut("ctrl+l")  # Focus address bar
+Type(text="C:\\Documents\\Reports")
+Shortcut("enter")
+Wait(duration=1)
+
+# 3. Take snapshot to identify files
+Snapshot(use_vision=True, use_annotation=True)
+
+# 4. Select all PDF files
+MultiSelect(
+    labels=[5, 8, 11, 14],  # PDF file labels
+    press_ctrl=True
+)
+
+# 5. Delete selected files
+Shortcut("delete")
+```
+
+### Form Automation
+
+```python
+# Select multiple options in a checklist
+Snapshot()
+
+# Check all relevant boxes
+MultiSelect(
+    labels=[15, 16, 18, 20],
+    press_ctrl=False  # Individual clicks
+)
+```
+
+### Gallery Selection
+
+```python
+# Select multiple images in a photo gallery
+Snapshot(use_annotation=True)
+
+MultiSelect(
+    labels=[6, 7, 8, 9],
+    press_ctrl=True
+)
+
+# Download selected
+Click(label=25)  # Download button
+```
+
+### Email Selection
+
+```python
+# Select multiple emails in inbox
+Snapshot()
+
+MultiSelect(
+    labels=[10, 12, 15, 18],
+    press_ctrl=True
+)
+
+# Mark as read
+Shortcut("ctrl+q")
+```
+
+## Timing Behavior
+
+- **Delay between clicks:** 0.2 seconds
+- **Post-click wait:** 0.5 seconds per item
+- **Ctrl key:** Pressed before first click, released after all clicks
+
+<Tip>
+  The tool automatically paces clicks to ensure UI responsiveness. For fast UIs, consider using individual Click calls if precision timing is needed.
+</Tip>
+
+## When to Use
+
+**Use MultiSelect when:**
+- Selecting multiple files or folders
+- Checking multiple checkboxes
+- Selecting non-contiguous list items
+- Building selection sets for batch operations
+
+**Use individual Click when:**
+- Selecting a single item
+- Timing precision is critical
+- Click order matters with UI state changes
+
+## Label vs Coordinate Selection
+
+| Approach | Best For | Notes |
+|----------|----------|-------|
+| **Labels** | Dynamic UIs | Auto-updates if UI changes slightly |
+| **Coordinates** | Static positions | Faster, no Snapshot required |
+
+<Warning>
+  **Always call Snapshot first** when using labels. MultiSelect will fail with "Desktop state is empty" if Snapshot hasn't been called.
+</Warning>
+
+## Error Handling
+
+```python
+# Missing parameters
+"Either locs or labels must be provided."
+
+# Invalid label
+"Failed to find element with label 25: IndexError"
+
+# No snapshot called
+"Desktop state is empty. Please call Snapshot first."
+```
+
+## Best Practices
+
+<Tip>
+  **Take a fresh Snapshot** immediately before MultiSelect to ensure labels are accurate.
+</Tip>
+
+<Tip>
+  **Use press_ctrl=True** for file/item selection, `press_ctrl=False` for checkboxes or toggles.
+</Tip>
+
+<Tip>
+  **Verify selection** with another Snapshot after MultiSelect to confirm the expected items are selected.
+</Tip>
+
+## Limitations
+
+- Maximum practical items: ~50 (timing constraints)
+- Requires Snapshot for label-based selection
+- Fixed 0.5s delay per item (not configurable)
+- Ctrl key held for entire sequence (no mixed press/release)
+
+## Related Tools
+
+- [Click](/tools/click) - Single element clicks
+- [Snapshot](/tools/snapshot) - Identify UI elements and labels
+- [Move](/tools/move) - Drag-and-drop after selection
+- [Shortcut](/tools/shortcut) - Select all (Ctrl+A) or other bulk operations

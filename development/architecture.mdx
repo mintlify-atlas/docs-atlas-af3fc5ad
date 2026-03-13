@@ -1,0 +1,346 @@
+---
+title: 'Architecture'
+description: 'Deep dive into Windows-MCP codebase architecture and design patterns'
+icon: 'diagram-project'
+---
+
+Windows-MCP follows a layered service architecture that separates concerns and provides clear extension points for new functionality.
+
+## Project Overview
+
+Windows-MCP is a Python MCP (Model Context Protocol) server that bridges AI LLM agents with the Windows OS, enabling direct desktop automation. It exposes 15 tools (App, Shell, Snapshot, Click, Type, Scroll, Move, Shortcut, Wait, Scrape, MultiSelect, MultiEdit, Clipboard, Process, Notification) via FastMCP.
+
+## Directory Structure
+
+All core code lives under `src/windows_mcp/`:
+
+```
+src/windows_mcp/
+├── __main__.py           # Entry point & tool registration
+├── analytics.py          # Telemetry decorator
+├── desktop/              # High-level orchestration
+│   ├── service.py
+│   └── views.py
+├── tree/                 # UI accessibility tree
+│   ├── service.py
+│   ├── views.py
+│   └── config.py
+├── uia/                  # UIAutomation COM wrapper
+│   ├── core.py
+│   ├── controls.py
+│   ├── patterns.py
+│   ├── enums.py
+│   └── events.py
+├── watchdog/             # Focus change monitoring
+│   └── service.py
+└── vdm/                  # Virtual Desktop Manager
+    └── core.py
+```
+
+## Architecture Layers
+
+### Entry Point Layer
+
+**`__main__.py`**: Registers all 15 MCP tools on a FastMCP server instance.
+
+- Uses an async lifespan to initialize Desktop, WatchDog, and Analytics services
+- Each tool function delegates to `Desktop` methods
+- The `@with_analytics` decorator wraps tools for telemetry
+- Supports stdio, SSE, and streamable HTTP transports
+
+```python
+# Example tool registration pattern
+@with_analytics(analytics, "click")
+async def click_tool(loc: list[int], button: str = "left", clicks: int = 1) -> str:
+    """Click on UI elements at specific coordinates."""
+    return await desktop.click(loc, button, clicks)
+```
+
+### Desktop Service Layer
+
+**`desktop/service.py`**: High-level orchestrator that manages all Windows interactions.
+
+**Responsibilities:**
+- Window operations (launch, resize, switch)
+- Screenshots and screen captures
+- Mouse and keyboard actions
+- Clipboard operations
+- Interfaces with Tree service for UI element discovery
+
+**`desktop/views.py`**: Data models used by the Desktop service.
+
+**Key Models:**
+- `DesktopState`: Current state of all windows and desktops
+- `Window`: Window metadata (name, size, status, handle)
+- `Size`: Width and height dimensions
+- `BoundingBox`: Element position and dimensions
+- `Status`: Window state enum (Maximized, Minimized, Normal, Hidden)
+- `Browser`: Browser detection utilities
+
+```python
+# Example Desktop service usage
+desktop_state = await desktop.get_state()
+windows = desktop_state.windows
+active_window = desktop_state.active_window
+```
+
+### Tree Service Layer
+
+**`tree/service.py`**: Captures the Windows accessibility tree from active and background windows.
+
+**Key Features:**
+- Identifies interactive UI elements (buttons, text fields, etc.)
+- Discovers scrollable areas
+- Uses `ThreadPoolExecutor` for multi-threaded UI traversal
+- Implements retry logic (`THREAD_MAX_RETRIES=3`)
+- Fuzzy string matching for element names (`thefuzz`)
+
+**`tree/views.py`**: Tree data models.
+
+**Key Models:**
+- `TreeElementNode`: Interactive UI element with bounding box and metadata
+- `ScrollElementNode`: Scrollable element with scroll state
+- `TreeState`: Complete UI tree structure
+
+**`tree/config.py`**: Control type configurations.
+
+- Defines which UIAutomation control types are interactive
+- Configures which elements are scrollable
+- Maps control types to display priorities
+
+```python
+# Example Tree service usage
+tree_state = await tree.get_tree(window_handle)
+interactive_elements = tree_state.elements
+scrollable_areas = tree_state.scrollable
+```
+
+### UIAutomation Wrapper Layer
+
+**`uia/`**: Low-level abstraction over the Windows UIAutomation COM API via `comtypes`.
+
+**`core.py`**: Wraps the main UIAutomation object.
+
+- Initializes COM threading
+- Provides element finding methods
+- Handles UIAutomation tree walking
+
+**`controls.py`**: Control-specific logic.
+
+- Wrapper classes for different control types
+- Control-specific action methods
+- Property accessors
+
+**`patterns.py`**: Wraps UIAutomation patterns.
+
+- Invoke pattern (buttons, menu items)
+- Value pattern (text inputs)
+- Scroll pattern (scrollable areas)
+- Window pattern (window operations)
+- Selection pattern (lists, comboboxes)
+
+**`enums.py`**: COM enumerations.
+
+- Control types
+- Pattern IDs
+- Property IDs
+- Event IDs
+
+**`events.py`**: Event subscription handling.
+
+- Focus changed events
+- Structure changed events
+- Property changed events
+
+<Note>
+  The UIAutomation layer uses the same coordinate space as `BoundingRectangle`, avoiding DPI mismatch issues.
+</Note>
+
+### WatchDog Service
+
+**`watchdog/service.py`**: Runs in a separate thread monitoring UI focus changes via UIAutomation events.
+
+**Functionality:**
+- Subscribes to focus changed events
+- Notifies Tree service of focus changes
+- Keeps accessibility tree current
+- Runs on background thread to avoid blocking
+
+```python
+# WatchDog pattern
+watchdog.start()  # Starts background thread
+# ... watchdog monitors for focus changes ...
+watchdog.stop()   # Stops background thread
+```
+
+### Virtual Desktop Manager
+
+**`vdm/core.py`**: Tracks which windows belong to which Windows virtual desktop (Win10/11).
+
+- Uses COM interfaces to query virtual desktop state
+- Maps window handles to desktop IDs
+- Supports multiple desktop tracking
+
+### Analytics Service
+
+**`analytics.py`**: Optional PostHog telemetry.
+
+- Disabled with `ANONYMIZED_TELEMETRY=false` environment variable
+- Tracks tool names and errors only (not arguments or outputs)
+- Decorator pattern for wrapping tool functions
+- Measures execution duration
+
+```python
+# Analytics decorator usage
+@with_analytics(analytics, "tool_name")
+async def tool_function(*args, **kwargs):
+    # Tool implementation
+    pass
+```
+
+## Service Patterns
+
+### Dependency Injection
+
+Services are injected via constructor parameters:
+
+```python
+class Desktop:
+    def __init__(self, tree: Tree, vdm: VirtualDesktopManager):
+        self.tree = tree
+        self.vdm = vdm
+```
+
+### Async/Await
+
+All service methods use async/await for non-blocking I/O:
+
+```python
+async def get_state(self) -> DesktopState:
+    # Async implementation
+    pass
+```
+
+### Data Models with Pydantic
+
+Views use Pydantic for data validation:
+
+```python
+from pydantic import BaseModel
+
+class Window(BaseModel):
+    name: str
+    handle: int
+    status: Status
+```
+
+### Retry Logic
+
+UI operations implement retry patterns:
+
+```python
+for attempt in range(THREAD_MAX_RETRIES):
+    try:
+        result = get_ui_element()
+        break
+    except Exception as e:
+        if attempt == THREAD_MAX_RETRIES - 1:
+            raise
+        time.sleep(0.1)
+```
+
+### Thread Pool Execution
+
+UI traversal uses thread pools for parallel processing:
+
+```python
+with ThreadPoolExecutor(max_workers=10) as executor:
+    futures = [executor.submit(process_element, elem) for elem in elements]
+    results = [f.result() for f in futures]
+```
+
+## Key Design Details
+
+### Screenshot Optimization
+
+- Screenshots are capped to 1920x1080 for token efficiency
+- Larger screens are downscaled while maintaining aspect ratio
+- PNG format with compression
+
+### Browser Detection
+
+- Detects Chrome, Edge, and Firefox by process name
+- Triggers special DOM extraction mode in Snapshot tool
+- Uses browser DevTools Protocol for accurate element capture
+
+### Fuzzy Matching
+
+- Uses `thefuzz` library for fuzzy string matching
+- Helps match UI elements when exact names vary slightly
+- Configurable match threshold (default 80%)
+
+### Coordinate Space
+
+- All coordinates use screen pixel coordinates
+- Mouse/keyboard input uses UIAutomation coordinate space
+- Matches `BoundingRectangle` property (no DPI conversion needed)
+
+### Error Handling
+
+- COM errors are caught and converted to Python exceptions
+- Retry logic for transient UI failures
+- Graceful degradation when elements not found
+
+## Extension Points
+
+### Adding New Tools
+
+1. Add tool function in `__main__.py`
+2. Implement logic in Desktop service
+3. Add UI interactions in Tree service if needed
+4. Wrap with `@with_analytics` decorator
+
+### Adding New Control Types
+
+1. Update `tree/config.py` with new control type
+2. Add control wrapper in `uia/controls.py` if needed
+3. Update Tree service to handle new type
+
+### Adding New Patterns
+
+1. Define pattern wrapper in `uia/patterns.py`
+2. Use pattern in control wrappers
+3. Expose through Desktop service API
+
+### Adding New Events
+
+1. Define event handler in `uia/events.py`
+2. Subscribe in WatchDog service
+3. Handle event in Tree service
+
+## Security Context
+
+<Warning>
+  This server has **full system access** with no sandboxing. Tools like Shell and App can perform irreversible operations. The recommended deployment target is a VM or Windows Sandbox.
+</Warning>
+
+### Security Considerations
+
+- No input sanitization on Shell tool (runs arbitrary commands)
+- App tool can launch any executable
+- Click/Type tools can interact with any UI element
+- Clipboard tool exposes system clipboard
+- Process tool can terminate any process
+
+**Recommendation**: Always run in isolated environment (VM, Windows Sandbox)
+
+## Performance Characteristics
+
+- **UI Tree Traversal**: 100-500ms depending on window complexity
+- **Screenshot Capture**: 50-200ms depending on screen size
+- **Element Lookup**: 10-50ms with caching
+- **Focus Change Detection**: Real-time (event-driven)
+
+## Testing Strategy
+
+See [Testing Guide](/development/testing) for detailed testing patterns and examples.

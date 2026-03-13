@@ -1,0 +1,383 @@
+---
+title: Desktop Service
+description: High-level orchestrator for Windows desktop automation
+---
+
+## Overview
+
+The Desktop service (`desktop/service.py`) is the high-level orchestrator for all desktop automation operations in Windows-MCP. It manages window operations, screenshots, mouse/keyboard interactions, and coordinates with the Tree service for UI element discovery.
+
+## Key Classes
+
+### Desktop
+
+The main service class that provides comprehensive desktop automation capabilities.
+
+<ParamField path="tree" type="Tree">
+  Reference to the Tree service for UI element discovery
+</ParamField>
+
+<ParamField path="desktop_state" type="DesktopState | None">
+  Cached desktop state from the last `get_state()` call
+</ParamField>
+
+<ParamField path="encoding" type="str">
+  System's preferred encoding (from `locale.getpreferredencoding()`)
+</ParamField>
+
+## Core Methods
+
+### get_state()
+
+Captures complete desktop state including windows, UI elements, and optionally a screenshot.
+
+```python
+def get_state(
+    self,
+    use_annotation: bool | str = True,
+    use_vision: bool | str = False,
+    use_dom: bool | str = False,
+    use_ui_tree: bool | str = True,
+    as_bytes: bool | str = False,
+    scale: float = 1.0,
+    grid_lines: tuple[int, int] | None = None,
+    display_indices: list[int] | None = None,
+    max_image_size: Size | None = None,
+) -> DesktopState
+```
+
+<ParamField path="use_annotation" type="bool" default={true}>
+  Draw colored bounding boxes around UI elements in the screenshot
+</ParamField>
+
+<ParamField path="use_vision" type="bool" default={false}>
+  Include screenshot in the returned state
+</ParamField>
+
+<ParamField path="use_dom" type="bool" default={false}>
+  Extract browser DOM elements instead of browser UI (requires `use_ui_tree=True`)
+</ParamField>
+
+<ParamField path="use_ui_tree" type="bool" default={true}>
+  Extract interactive and scrollable UI elements
+</ParamField>
+
+<ParamField path="display_indices" type="list[int] | None">
+  Limit capture to specific displays (e.g., `[0]` or `[0, 1]`)
+</ParamField>
+
+<ResponseField name="DesktopState" type="DesktopState">
+  Complete desktop state with windows, UI elements, and optional screenshot
+</ResponseField>
+
+### Window Management
+
+#### app()
+
+Launch, resize, or switch applications.
+
+```python
+def app(
+    self,
+    mode: Literal["launch", "switch", "resize"],
+    name: str | None = None,
+    loc: tuple[int, int] | None = None,
+    size: tuple[int, int] | None = None,
+)
+```
+
+<ParamField path="mode" type="string">
+  - `launch`: Opens the specified application
+  - `switch`: Brings window to foreground
+  - `resize`: Adjusts window size/position
+</ParamField>
+
+<ParamField path="name" type="string">
+  Application or window name (uses fuzzy matching)
+</ParamField>
+
+#### get_windows()
+
+Retrieve all visible windows on the desktop.
+
+```python
+def get_windows(
+    self,
+    controls_handles: set[int] | None = None
+) -> tuple[list[Window], set[int]]
+```
+
+<ResponseField name="windows" type="list[Window]">
+  List of Window objects representing all visible windows
+</ResponseField>
+
+<ResponseField name="handles" type="set[int]">
+  Set of window handles
+</ResponseField>
+
+### Mouse & Keyboard Interaction
+
+#### click()
+
+Perform mouse clicks at specified coordinates.
+
+```python
+def click(
+    self,
+    loc: tuple[int, int] | list[int],
+    button: str = "left",
+    clicks: int = 2
+)
+```
+
+<ParamField path="loc" type="tuple[int, int]">
+  Screen coordinates `(x, y)`
+</ParamField>
+
+<ParamField path="button" type="string" default="left">
+  Mouse button: `left`, `right`, or `middle`
+</ParamField>
+
+<ParamField path="clicks" type="int" default={2}>
+  Number of clicks (0=hover, 1=single click, 2=double click)
+</ParamField>
+
+#### type()
+
+Type text at specified location.
+
+```python
+def type(
+    self,
+    loc: tuple[int, int],
+    text: str,
+    caret_position: Literal["start", "idle", "end"] = "idle",
+    clear: bool | str = False,
+    press_enter: bool | str = False,
+)
+```
+
+#### scroll()
+
+Scroll at location or current cursor position.
+
+```python
+def scroll(
+    self,
+    loc: tuple[int, int] = None,
+    type: Literal["horizontal", "vertical"] = "vertical",
+    direction: Literal["up", "down", "left", "right"] = "down",
+    wheel_times: int = 1,
+) -> str | None
+```
+
+#### shortcut()
+
+Execute keyboard shortcuts.
+
+```python
+def shortcut(self, shortcut: str)
+```
+
+<ParamField path="shortcut" type="string">
+  Key combination separated by `+` (e.g., `"ctrl+c"`, `"win+r"`)
+</ParamField>
+
+### Screenshot Capture
+
+#### get_screenshot()
+
+Capture raw screenshot.
+
+```python
+def get_screenshot(
+    self,
+    capture_rect: uia.Rect | None = None
+) -> Image.Image
+```
+
+#### get_annotated_screenshot()
+
+Capture screenshot with UI element annotations.
+
+```python
+def get_annotated_screenshot(
+    self,
+    nodes: list[TreeElementNode],
+    cursor_pos: tuple[int, int] | None = None,
+    grid_lines: tuple[int, int] | None = None,
+    capture_rect: uia.Rect | None = None,
+) -> Image.Image
+```
+
+### Command Execution
+
+#### execute_command()
+
+Execute PowerShell commands.
+
+```python
+def execute_command(
+    self,
+    command: str,
+    timeout: int = 10
+) -> tuple[str, int]
+```
+
+<ResponseField name="output" type="string">
+  Command output (stdout or stderr)
+</ResponseField>
+
+<ResponseField name="return_code" type="int">
+  Exit code (0 = success)
+</ResponseField>
+
+## Data Models
+
+### DesktopState
+
+Complete state snapshot of the desktop.
+
+```python
+@dataclass
+class DesktopState:
+    active_desktop: dict
+    all_desktops: list[dict]
+    active_window: Window | None
+    windows: list[Window]
+    screenshot: Image | None = None
+    cursor_position: tuple[int, int] | None = None
+    screenshot_size: Size | None = None
+    screenshot_region: BoundingBox | None = None
+    screenshot_displays: list[int] | None = None
+    tree_state: TreeState | None = None
+```
+
+<Expandable title="DesktopState Fields">
+  <ResponseField name="active_desktop" type="dict">
+    Currently active virtual desktop with `id` and `name`
+  </ResponseField>
+
+  <ResponseField name="all_desktops" type="list[dict]">
+    All available virtual desktops
+  </ResponseField>
+
+  <ResponseField name="active_window" type="Window | None">
+    Currently focused window
+  </ResponseField>
+
+  <ResponseField name="windows" type="list[Window]">
+    All visible windows (excluding active window)
+  </ResponseField>
+
+  <ResponseField name="tree_state" type="TreeState | None">
+    UI element tree with interactive and scrollable nodes
+  </ResponseField>
+</Expandable>
+
+### Window
+
+Represents a single application window.
+
+```python
+@dataclass
+class Window:
+    name: str
+    is_browser: bool
+    depth: int
+    status: Status
+    bounding_box: BoundingBox
+    handle: int
+    process_id: int
+```
+
+### Status
+
+Window display state enumeration.
+
+```python
+class Status(Enum):
+    MAXIMIZED = "Maximized"
+    MINIMIZED = "Minimized"
+    NORMAL = "Normal"
+    HIDDEN = "Hidden"
+```
+
+### Browser
+
+Supported browser process names.
+
+```python
+class Browser(Enum):
+    CHROME = "chrome"
+    EDGE = "msedge"
+    FIREFOX = "firefox"
+```
+
+## Usage Examples
+
+### Capture Desktop State
+
+```python
+from windows_mcp.desktop.service import Desktop
+
+desktop = Desktop()
+state = desktop.get_state(
+    use_vision=True,
+    use_annotation=True,
+    display_indices=[0]
+)
+
+print(f"Active window: {state.active_window.name}")
+print(f"Interactive elements: {len(state.tree_state.interactive_nodes)}")
+```
+
+### Launch and Switch Applications
+
+```python
+# Launch Notepad
+desktop.app(mode="launch", name="notepad")
+
+# Switch to Chrome
+desktop.app(mode="switch", name="chrome")
+
+# Resize Calculator
+desktop.app(
+    mode="resize",
+    name="calculator",
+    size=(400, 600),
+    loc=(100, 100)
+)
+```
+
+### Interact with UI Elements
+
+```python
+# Click at coordinates
+desktop.click(loc=(500, 300), button="left", clicks=1)
+
+# Type text
+desktop.type(loc=(500, 300), text="Hello World", clear=True)
+
+# Scroll down
+desktop.scroll(loc=(500, 500), type="vertical", direction="down")
+
+# Execute shortcut
+desktop.shortcut("ctrl+s")
+```
+
+### Execute Commands
+
+```python
+output, code = desktop.execute_command(
+    "Get-Process | Select-Object -First 5",
+    timeout=10
+)
+print(output)
+```
+
+## Source Location
+
+- **Implementation**: `src/windows_mcp/desktop/service.py` (desktop/service.py:69)
+- **Data Models**: `src/windows_mcp/desktop/views.py` (desktop/views.py:1)
+- **Usage**: `src/windows_mcp/__main__.py` (__main__.py:56)

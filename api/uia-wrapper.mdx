@@ -1,0 +1,475 @@
+---
+title: UIAutomation Wrapper
+description: Low-level Windows UI Automation COM API wrapper
+---
+
+## Overview
+
+The `uia/` module provides a Python wrapper around the Windows UI Automation COM API via `comtypes`. It abstracts the low-level COM interface for discovering, inspecting, and interacting with Windows UI elements.
+
+Based on [Python-UIAutomation-for-Windows](https://github.com/yinkaisheng/Python-UIAutomation-for-Windows) by yinkaisheng.
+
+## Architecture
+
+The UIAutomation wrapper consists of four key modules:
+
+- **core.py**: Main automation client and coordinate helpers
+- **controls.py**: Control classes wrapping IUIAutomationElement
+- **patterns.py**: UI Automation pattern interfaces (Invoke, Value, Scroll, etc.)
+- **enums.py**: COM enumerations (ControlType, PatternId, PropertyId, etc.)
+- **events.py**: Event subscription handlers
+
+## Core Classes
+
+### _AutomationClient
+
+Singleton that initializes the COM UIAutomation interface.
+
+```python
+class _AutomationClient:
+    @classmethod
+    def instance(cls) -> "_AutomationClient":
+        """Get singleton instance."""
+```
+
+<ResponseField name="IUIAutomation" type="IUIAutomation">
+  COM interface to Windows UI Automation
+</ResponseField>
+
+<ResponseField name="ViewWalker" type="IUIAutomationTreeWalker">
+  Tree walker for navigating the UI element hierarchy
+</ResponseField>
+
+### Control
+
+Base class wrapping `IUIAutomationElement`.
+
+```python
+class Control:
+    def __init__(
+        self,
+        searchFromControl: Control | None = None,
+        searchDepth: int = 0xFFFFFFFF,
+        searchInterval: float = SEARCH_INTERVAL,
+        foundIndex: int = 1,
+        element=None,
+        ControlType: int | None = None,
+        Name: str | None = None,
+        ClassName: str | None = None,
+        AutomationId: str | None = None,
+        **searchProperties,
+    )
+```
+
+<ParamField path="element" type="ctypes.POINTER(IUIAutomationElement)">
+  Internal COM element pointer
+</ParamField>
+
+<ParamField path="searchProperties" type="dict">
+  Search criteria (Name, ClassName, AutomationId, etc.)
+</ParamField>
+
+#### Key Properties
+
+```python
+# Live properties (uncached)
+control.Name                    # Element name
+control.ClassName               # Window class name
+control.AutomationId            # Automation identifier
+control.ControlType             # ControlType enum value
+control.ControlTypeName         # "ButtonControl", "EditControl", etc.
+control.LocalizedControlType    # "button", "edit", etc.
+control.BoundingRectangle       # Rect(left, top, right, bottom)
+control.NativeWindowHandle      # HWND integer
+control.ProcessId               # Process ID
+control.IsEnabled               # Whether element is enabled
+control.IsOffscreen             # Whether element is offscreen
+control.HasKeyboardFocus        # Whether element has focus
+control.IsKeyboardFocusable     # Whether element can receive focus
+control.IsControlElement        # Whether element is a control
+
+# Cached properties (requires BuildUpdatedCache)
+control.CachedName
+control.CachedClassName
+control.CachedBoundingRectangle
+# ... (all properties have Cached* equivalents)
+```
+
+#### Key Methods
+
+```python
+# Tree navigation
+control.GetParentControl() -> Control | None
+control.GetFirstChildControl() -> Control | None
+control.GetLastChildControl() -> Control | None
+control.GetNextSiblingControl() -> Control | None
+control.GetPreviousSiblingControl() -> Control | None
+control.GetChildren() -> list[Control]
+control.GetTopLevelControl() -> Control | None
+
+# Pattern access
+control.GetPattern(patternId: int) -> Pattern | None
+control.GetCachedPattern(patternId: int, useCache: bool) -> Pattern | None
+
+# Property access
+control.GetPropertyValue(propertyId: int) -> Any
+control.GetCachedPropertyValue(propertyId: int) -> Any
+
+# Caching
+control.BuildUpdatedCache(cacheRequest: CacheRequest) -> Control
+
+# Static constructors
+Control.CreateControlFromElement(element) -> Control
+Control.CreateControlFromControl(control) -> Control
+```
+
+### Specialized Control Classes
+
+The wrapper provides typed subclasses for specific control types:
+
+```python
+class ButtonControl(Control):
+    """Button elements."""
+
+class EditControl(Control):
+    """Text input fields."""
+
+class CheckBoxControl(Control):
+    """Checkboxes."""
+
+class ComboBoxControl(Control):
+    """Dropdown/combo boxes."""
+
+class ListControl(Control):
+    """List containers."""
+
+class ListItemControl(Control):
+    """List items."""
+
+class HyperlinkControl(Control):
+    """Hyperlinks."""
+
+class WindowControl(Control):
+    """Top-level windows."""
+
+class PaneControl(Control):
+    """Container panes."""
+
+class SliderControl(Control):
+    """Slider controls."""
+
+# ... and many more (see controls.py)
+```
+
+## UI Automation Patterns
+
+Patterns provide specialized functionality for controls. Access via `GetPattern()`.
+
+### InvokePattern
+
+Invoke buttons/menu items.
+
+```python
+invoke = control.GetPattern(PatternId.InvokePattern)
+invoke.Invoke()
+```
+
+### ValuePattern
+
+Get/set control values.
+
+```python
+value = control.GetPattern(PatternId.ValuePattern)
+value.SetValue("text")
+current = value.Value
+is_readonly = value.IsReadOnly
+```
+
+### ScrollPattern
+
+Control scrolling.
+
+```python
+scroll = control.GetPattern(PatternId.ScrollPattern)
+scroll.Scroll(ScrollAmount.LargeIncrement, ScrollAmount.NoAmount)
+
+# Properties
+scroll.HorizontallyScrollable  # bool
+scroll.VerticallyScrollable    # bool
+scroll.HorizontalScrollPercent # float (0-100)
+scroll.VerticalScrollPercent   # float (0-100)
+```
+
+### TogglePattern
+
+Toggle checkboxes.
+
+```python
+toggle = control.GetPattern(PatternId.TogglePattern)
+toggle.Toggle()
+state = toggle.ToggleState  # ToggleState.On, Off, Indeterminate
+```
+
+### WindowPattern
+
+Window operations.
+
+```python
+window = control.GetPattern(PatternId.WindowPattern)
+window.Minimize()
+window.Maximize()
+window.Close()
+
+can_minimize = window.CanMinimize
+can_maximize = window.CanMaximize
+state = window.WindowVisualState  # Normal, Minimized, Maximized
+```
+
+### ExpandCollapsePattern
+
+Expand/collapse tree items.
+
+```python
+expand = control.GetPattern(PatternId.ExpandCollapsePattern)
+expand.Expand()
+expand.Collapse()
+state = expand.ExpandCollapseState  # Expanded, Collapsed, PartiallyExpanded
+```
+
+See `patterns.py` for complete list of patterns.
+
+## Mouse & Keyboard Functions
+
+### Mouse Control
+
+```python
+import windows_mcp.uia as uia
+
+# Mouse movement
+uia.MoveTo(x, y, moveSpeed=1)  # moveSpeed: 1=normal, <1=slower, >1=faster
+uia.SetCursorPos(x, y)
+uia.GetCursorPos() -> (x, y)
+
+# Clicking
+uia.Click(x, y, waitTime=0.5)
+uia.RightClick(x, y)
+uia.MiddleClick(x, y)
+
+# Drag and drop
+uia.DragDrop(x1, y1, x2, y2, moveSpeed=1)
+
+# Scrolling
+uia.WheelUp(wheelTimes=1)
+uia.WheelDown(wheelTimes=1)
+```
+
+### Keyboard Control
+
+```python
+import windows_mcp.uia as uia
+
+# Type text
+uia.SendKeys("{Ctrl}a{Delete}Hello World{Enter}")
+
+# Special keys
+uia.SendKey(uia.Keys.VK_RETURN)
+uia.PressKey(uia.Keys.VK_CONTROL)  # Hold
+uia.ReleaseKey(uia.Keys.VK_CONTROL)  # Release
+
+# Check key state
+if uia.IsKeyPressed(uia.Keys.VK_SHIFT):
+    print("Shift is pressed")
+```
+
+#### SendKeys Format
+
+Special keys are enclosed in `{}`:
+
+```python
+uia.SendKeys("{Ctrl}c")           # Ctrl+C
+uia.SendKeys("{Ctrl}{Shift}s")  # Ctrl+Shift+S
+uia.SendKeys("{Win}r")           # Win+R
+uia.SendKeys("{Ctrl}(AB)")      # Ctrl+A+B (hold Ctrl, press A, press B)
+uia.SendKeys("{a 3}")            # Type 'a' 3 times
+uia.SendKeys("{{Hello}}")        # Type '{Hello}'
+```
+
+Special key names: `{Ctrl}`, `{Shift}`, `{Alt}`, `{Win}`, `{Enter}`, `{Tab}`, `{Esc}`, `{Space}`, `{Back}`, `{Delete}`, `{Home}`, `{End}`, `{PageUp}`, `{PageDown}`, `{Left}`, `{Right}`, `{Up}`, `{Down}`, etc.
+
+## Screen & Window Functions
+
+```python
+import windows_mcp.uia as uia
+
+# Screen info
+uia.GetScreenSize() -> (width, height)
+uia.GetVirtualScreenSize() -> (width, height)
+uia.GetVirtualScreenRect() -> (left, top, width, height)
+uia.GetMonitorsRect() -> list[Rect]
+
+# Window operations
+handle = uia.GetForegroundWindow()  # Get active window handle
+uia.SetForegroundWindow(handle)
+uia.BringWindowToTop(handle)
+uia.ShowWindow(handle, SW.ShowNormal)
+uia.MoveWindow(handle, x, y, width, height)
+uia.GetWindowText(handle) -> str
+uia.SetWindowText(handle, "New Title")
+
+# Window state
+uia.IsIconic(handle)       # Is minimized?
+uia.IsZoomed(handle)       # Is maximized?
+uia.IsWindowVisible(handle)
+
+# Control from coordinates or handle
+control = uia.ControlFromCursor()
+control = uia.ControlFromHandle(handle)
+control = uia.WindowFromPoint(x, y)
+```
+
+## Rect Helper Class
+
+```python
+class Rect:
+    def __init__(self, left: int, top: int, right: int, bottom: int)
+    
+    def width(self) -> int
+    def height(self) -> int
+    def xcenter(self) -> int
+    def ycenter(self) -> int
+    def isempty(self) -> bool
+    def intersect(self, rect: Rect) -> Rect  # Intersection
+```
+
+## Enumerations
+
+Key enums from `enums.py`:
+
+### ControlType
+
+```python
+ControlType.ButtonControl      # 50000
+ControlType.EditControl        # 50004
+ControlType.WindowControl      # 50032
+ControlType.PaneControl        # 50033
+ControlType.TextControl        # 50020
+# ... (50+ control types)
+```
+
+### PatternId
+
+```python
+PatternId.InvokePattern        # 10000
+PatternId.ValuePattern         # 10002
+PatternId.ScrollPattern        # 10003
+PatternId.TogglePattern        # 10015
+PatternId.WindowPattern        # 10009
+# ... (30+ patterns)
+```
+
+### PropertyId
+
+```python
+PropertyId.NameProperty                           # 30005
+PropertyId.ClassNameProperty                      # 30012
+PropertyId.BoundingRectangleProperty              # 30001
+PropertyId.IsEnabledProperty                      # 30010
+PropertyId.LegacyIAccessibleValueProperty         # 30094
+# ... (100+ properties)
+```
+
+### TreeScope
+
+```python
+TreeScope.TreeScope_Element       # 1
+TreeScope.TreeScope_Children      # 2
+TreeScope.TreeScope_Descendants   # 4
+TreeScope.TreeScope_Subtree       # 7 (Element | Children | Descendants)
+```
+
+## Usage Examples
+
+### Find and Click Button
+
+```python
+import windows_mcp.uia as uia
+
+# Find button by name
+button = uia.ButtonControl(Name="OK")
+if button.Exists(maxSearchSeconds=5):
+    button.Click()
+```
+
+### Type into Text Field
+
+```python
+import windows_mcp.uia as uia
+
+# Find edit control
+edit = uia.EditControl(AutomationId="searchBox")
+if edit.Exists():
+    # Clear and type
+    value = edit.GetPattern(uia.PatternId.ValuePattern)
+    value.SetValue("")
+    edit.SendKeys("Hello World")
+```
+
+### Navigate Tree
+
+```python
+import windows_mcp.uia as uia
+
+root = uia.GetRootControl()  # Desktop
+for child in root.GetChildren():
+    print(f"{child.ControlTypeName}: {child.Name}")
+    
+    # Recurse to children
+    for grandchild in child.GetChildren():
+        print(f"  {grandchild.ControlTypeName}: {grandchild.Name}")
+```
+
+### Check Scroll State
+
+```python
+import windows_mcp.uia as uia
+
+control = uia.ControlFromHandle(window_handle)
+scroll = control.GetPattern(uia.PatternId.ScrollPattern)
+
+if scroll and scroll.VerticallyScrollable:
+    percent = scroll.VerticalScrollPercent
+    print(f"Scrolled {percent}%")
+    
+    if percent < 100:
+        scroll.Scroll(uia.ScrollAmount.LargeIncrement, uia.ScrollAmount.NoAmount)
+```
+
+### Window Operations
+
+```python
+import windows_mcp.uia as uia
+
+window = uia.WindowControl(Name="Calculator")
+if window.Exists():
+    pattern = window.GetPattern(uia.PatternId.WindowPattern)
+    pattern.SetWindowVisualState(uia.WindowVisualState.Maximized)
+```
+
+## DPI Awareness
+
+The wrapper automatically sets process DPI awareness to ensure coordinates match physical pixels:
+
+```python
+# Set at module load (core.py:1602)
+uia.SetProcessDpiAwareness(ProcessDpiAwareness.PerMonitorDpiAware)
+```
+
+This prevents coordinate mismatches on scaled displays (125%, 150%, etc.).
+
+## Source Location
+
+- **Core**: `src/windows_mcp/uia/core.py` (uia/core.py:49)
+- **Controls**: `src/windows_mcp/uia/controls.py` (uia/controls.py:50)
+- **Patterns**: `src/windows_mcp/uia/patterns.py` (uia/patterns.py:49)
+- **Enums**: `src/windows_mcp/uia/enums.py`
+- **Events**: `src/windows_mcp/uia/events.py`

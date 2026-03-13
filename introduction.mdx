@@ -1,0 +1,175 @@
+---
+title: Introduction
+description: Lightweight MCP server that bridges AI agents with Windows OS for seamless desktop automation
+---
+
+## What is Windows-MCP?
+
+**Windows-MCP** is a lightweight, open-source Model Context Protocol (MCP) server that enables seamless integration between AI agents and the Windows operating system. Acting as a bridge, it allows large language models (LLMs) to perform tasks such as file navigation, application control, UI interaction, QA testing, and more—directly on Windows.
+
+With Windows-MCP, AI agents gain the ability to:
+- Launch and control Windows applications
+- Navigate and interact with UI elements
+- Execute PowerShell commands and scripts
+- Automate repetitive tasks across the desktop
+- Perform comprehensive QA testing workflows
+- Access the Windows Registry and manage system processes
+
+<Note>
+  Windows-MCP reached **2M+ users** in the Claude Desktop Extensions directory and is available on [PyPI](https://pypi.org/project/windows-mcp/) for easy installation.
+</Note>
+
+## Key Benefits
+
+<CardGroup cols={2}>
+  <Card title="Seamless Windows Integration" icon="windows">
+    Interacts natively with Windows UI elements, opens applications, controls windows, simulates user input, and more—no screen parsing or complex vision models required.
+  </Card>
+  
+  <Card title="Works with Any LLM" icon="robot">
+    Unlike many automation tools, Windows-MCP doesn't rely on traditional computer vision techniques or specific fine-tuned models. It works with any LLM, reducing complexity and setup time.
+  </Card>
+  
+  <Card title="Rich Toolset for UI Automation" icon="toolbox">
+    Includes 15+ tools for keyboard and mouse operations, window management, capturing UI state, file operations, and system-level tasks.
+  </Card>
+  
+  <Card title="Lightweight & Open-Source" icon="feather">
+    Minimal dependencies with full source code available under the MIT license. Easy to adapt or extend for custom automation workflows.
+  </Card>
+</CardGroup>
+
+### Additional Advantages
+
+- **Real-Time Interaction**: Typical latency between actions (e.g., from one mouse click to the next) ranges from **0.2 to 0.9 seconds**, depending on system load, active applications, and LLM inference speed.
+- **DOM Mode for Browser Automation**: Special `use_dom=True` mode for the Snapshot tool that focuses exclusively on web page content, filtering out browser UI elements for cleaner, more efficient web automation.
+- **Customizable & Extendable**: Built with FastMCP and a modular architecture, making it easy to add new tools or modify existing ones to suit your specific needs.
+
+## Supported Operating Systems
+
+Windows-MCP supports all modern Windows versions:
+
+- Windows 7
+- Windows 8, 8.1
+- Windows 10
+- Windows 11
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Desktop Automation">
+    Automate repetitive tasks across Windows applications. Open files, fill forms, click buttons, navigate menus—all controlled by natural language instructions to your AI agent.
+  </Accordion>
+  
+  <Accordion title="QA Testing">
+    Build comprehensive testing workflows that interact with your application's UI, verify element states, capture screenshots for visual regression testing, and execute test scenarios.
+  </Accordion>
+  
+  <Accordion title="Web Scraping & Browser Automation">
+    Navigate websites, extract content using DOM mode, fill out forms, and interact with web applications—all through AI-driven commands.
+  </Accordion>
+  
+  <Accordion title="System Administration">
+    Execute PowerShell commands, manage processes, modify registry entries, and perform system-level operations through natural language instructions.
+  </Accordion>
+  
+  <Accordion title="Data Entry & Migration">
+    Automate data entry tasks across multiple applications, transfer information between systems, and handle bulk operations efficiently.
+  </Accordion>
+</AccordionGroup>
+
+## Architecture Overview
+
+Windows-MCP is built with a layered service architecture:
+
+- **FastMCP Server**: Exposes 15 MCP tools via the Model Context Protocol
+- **Desktop Service**: High-level orchestrator for window operations, screenshots, mouse/keyboard actions
+- **Tree Service**: Captures the Windows accessibility tree to identify interactive UI elements
+- **UIAutomation Wrapper**: Low-level abstraction over the Windows UIAutomation COM API
+- **WatchDog Service**: Monitors UI focus changes to keep the accessibility tree current
+- **Analytics**: Optional PostHog telemetry (can be disabled)
+
+<Warning>
+  Windows-MCP operates with **full system access** and can perform irreversible operations like file deletion, registry modifications, and process termination. Review the [Security Policy](https://github.com/CursorTouch/Windows-MCP/blob/main/SECURITY.md) before deployment. Recommended for use in VMs or Windows Sandbox environments.
+</Warning>
+
+## Available Tools
+
+Windows-MCP provides 15 powerful tools for Windows automation:
+
+| Tool | Description |
+|------|-------------|
+| **App** | Launch applications, resize/move windows, switch between apps |
+| **PowerShell** | Execute PowerShell commands and scripts |
+| **FileSystem** | Read, write, copy, move, delete, list, search files and directories |
+| **Snapshot** | Capture desktop state including UI elements, windows, and screenshots |
+| **Click** | Perform mouse clicks at coordinates or on labeled UI elements |
+| **Type** | Type text into input fields and text areas |
+| **Scroll** | Scroll vertically or horizontally in windows or regions |
+| **Move** | Move mouse cursor or perform drag-and-drop operations |
+| **Shortcut** | Execute keyboard shortcuts (Ctrl+C, Alt+Tab, Win+R, etc.) |
+| **Wait** | Pause execution for UI to load or animations to complete |
+| **Scrape** | Fetch and extract content from web pages |
+| **MultiSelect** | Select multiple items (files, checkboxes) at once |
+| **MultiEdit** | Enter text into multiple input fields simultaneously |
+| **Clipboard** | Read or set Windows clipboard content |
+| **Process** | List running processes or terminate them by PID or name |
+| **Notification** | Send Windows toast notifications |
+| **Registry** | Read, write, delete, or list Windows Registry values and keys |
+
+## Operating Modes
+
+Windows-MCP supports two deployment modes:
+
+### Local Mode (Default)
+
+Runs directly on your Windows machine and exposes tools to the connected MCP client. This is the standard setup for personal use.
+
+```bash
+# Default stdio transport
+uvx windows-mcp
+
+# Network-accessible via SSE
+uvx windows-mcp --transport sse --host localhost --port 8000
+
+# Network-accessible via HTTP streaming
+uvx windows-mcp --transport streamable-http --host localhost --port 8000
+```
+
+### Remote Mode
+
+Acts as a proxy connecting to [windowsmcp.io](https://windowsmcp.io) for cloud-hosted Windows automation. Spin up a Windows sandbox in seconds with no local setup needed.
+
+Requires environment variables:
+- `MODE=remote`
+- `SANDBOX_ID` (from windowsmcp.io dashboard)
+- `API_KEY` (from windowsmcp.io dashboard)
+
+## Requirements
+
+- **Python**: 3.13 or higher
+- **UV Package Manager**: Install with `pip install uv` or `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- **Windows Language**: English as default language recommended (or disable App tool for other languages)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get Windows-MCP running in 5 minutes with a simple example
+  </Card>
+  
+  <Card title="Installation Guide" icon="download" href="/installation">
+    Detailed installation instructions for all MCP clients
+  </Card>
+</CardGroup>
+
+## Community & Support
+
+- **GitHub**: [CursorTouch/Windows-MCP](https://github.com/CursorTouch/Windows-MCP)
+- **Discord**: [Join our community](https://discord.com/invite/Aue9Yj2VzS)
+- **Twitter/X**: [@CursorTouch](https://x.com/CursorTouch)
+- **Issues**: [Report bugs or request features](https://github.com/CursorTouch/Windows-MCP/issues)
+
+<Note>
+  Windows-MCP collects anonymous usage data to help improve the server. No personal information, tool arguments, or outputs are tracked. You can disable telemetry by setting `ANONYMIZED_TELEMETRY=false` in your configuration.
+</Note>

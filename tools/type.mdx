@@ -1,0 +1,332 @@
+---
+title: Type
+description: Enter text into input fields with advanced caret control
+---
+
+The **Type** tool enters text at specified coordinates or into UI elements identified by Snapshot labels. Supports clearing existing text, caret positioning, and automatic submission.
+
+## Purpose & Use Cases
+
+- **Form Filling**: Enter text into input fields, text areas, and combo boxes
+- **Search Queries**: Type search terms with auto-submission
+- **Text Replacement**: Clear and replace existing text
+- **Caret Control**: Position cursor at start, end, or current position
+- **Multi-Line Input**: Enter text with line breaks
+- **Special Characters**: Type any Unicode character
+
+## Parameters
+
+<ParamField path="text" type="string" required>
+  Text to type. Supports:
+  - Any Unicode characters
+  - Newlines (`\n` converted to Enter key)
+  - Tabs (`\t` converted to Tab key)
+  - Special characters (automatically escaped)
+</ParamField>
+
+<ParamField path="loc" type="array" optional>
+  Exact coordinates `[x, y]` of the input field. Either `loc` or `label` must be provided.
+</ParamField>
+
+<ParamField path="label" type="integer" optional>
+  UI element label from Snapshot output. Either `loc` or `label` must be provided.
+</ParamField>
+
+<ParamField path="clear" type="boolean" default="false">
+  Clear existing text before typing:
+  - `true`: Select all (Ctrl+A) and delete existing content
+  - `false`: Append to existing text at caret position
+</ParamField>
+
+<ParamField path="caret_position" type="string" default="idle">
+  Position the text caret before typing:
+  - `"idle"`: Keep caret at current position (default)
+  - `"start"`: Move caret to beginning of field (Home key)
+  - `"end"`: Move caret to end of field (End key)
+</ParamField>
+
+<ParamField path="press_enter" type="boolean" default="false">
+  Press Enter key after typing:
+  - `true`: Submit form or execute command
+  - `false`: Leave cursor in field
+</ParamField>
+
+## Return Values
+
+Returns a success message:
+```
+"Typed Hello World at (640,480)."
+```
+
+Throws error if:
+- Neither `loc` nor `label` provided
+- `label` is out of range
+- Desktop state is empty (call Snapshot first)
+- Coordinates are invalid
+
+## Code Examples
+
+### Basic Text Input
+```python
+# Type into a text field using label
+Snapshot(use_vision=True)
+Type(text="John Doe", label=5)
+```
+
+### Clear and Replace Text
+```python
+# Clear existing text and type new content
+Type(
+    text="new.email@example.com",
+    label=8,
+    clear=True
+)
+```
+
+### Search with Auto-Submit
+```python
+# Type search query and press Enter
+Shortcut("ctrl+f")  # Open search dialog
+Wait(duration=0.5)
+Snapshot()
+Type(
+    text="windows automation",
+    label=3,
+    press_enter=True
+)
+```
+
+### Multi-Line Text Entry
+```python
+# Type multi-line text (newlines become Enter keys)
+Type(
+    text="Line 1\nLine 2\nLine 3",
+    label=10
+)
+```
+
+### Caret Positioning
+```python
+# Insert text at the beginning
+Type(
+    text="Prefix: ",
+    label=5,
+    caret_position="start",
+    clear=False
+)
+
+# Append text at the end
+Type(
+    text=" - Suffix",
+    label=5,
+    caret_position="end"
+)
+```
+
+### Type by Coordinates
+```python
+# Type at specific screen coordinates
+Click(loc=[640, 480])  # Focus the field
+Type(text="Direct typing", loc=[640, 480])
+```
+
+## Common Patterns
+
+### Form Filling Workflow
+```python
+# Fill multiple form fields
+Snapshot(use_vision=True)
+
+# Name field
+Type(text="Alice Smith", label=5, clear=True)
+
+# Email field
+Type(text="alice@example.com", label=6, clear=True)
+
+# Phone field
+Type(text="555-1234", label=7, clear=True)
+
+# Submit
+Click(label=8)  # Submit button
+```
+
+### Text Replacement
+```python
+# Replace existing text in a field
+Click(label=10)  # Focus field
+Type(
+    text="Replacement text",
+    label=10,
+    clear=True
+)
+```
+
+### Incremental Text Entry
+```python
+# Type text in parts without clearing
+Type(text="Hello ", label=5)
+Wait(duration=0.5)
+Type(text="World", label=5)  # Appends to existing text
+```
+
+### URL Entry and Navigation
+```python
+# Navigate to URL in browser
+App(mode="launch", name="chrome")
+Wait(duration=2)
+Shortcut("ctrl+l")  # Focus address bar
+Wait(duration=0.3)
+Type(
+    text="https://example.com",
+    loc=[640, 60],  # Address bar position
+    clear=True,
+    press_enter=True
+)
+Wait(duration=3)  # Wait for page load
+```
+
+### Password Entry
+```python
+# Securely type password (text not visible in logs)
+Snapshot()
+Type(
+    text=get_password(),  # From secure source
+    label=12,
+    clear=True,
+    press_enter=True
+)
+```
+
+## Best Practices
+
+<Tip>
+**Always Click Before Typing**
+While Type includes an implicit click, it's best practice to explicitly click first to ensure focus:
+```python
+Click(label=5)  # Ensure field is focused
+Wait(duration=0.2)
+Type(text="content", label=5)
+```
+</Tip>
+
+<Tip>
+**Use clear=True for Reliability**
+When setting field values (not appending), always use `clear=True` to avoid unexpected behavior:
+```python
+Type(text="new value", label=5, clear=True)
+```
+</Tip>
+
+<Tip>
+**Wait After Typing**
+Some applications need time to process input:
+```python
+Type(text="query", label=3, press_enter=True)
+Wait(duration=1)  # Allow processing time
+```
+</Tip>
+
+<Warning>
+**Special Characters**
+Braces `{` and `}` are automatically escaped. If typing fails with special characters, the text may contain UIAutomation special key codes. Use alternative input methods if needed.
+</Warning>
+
+<Warning>
+**Focus Requirements**
+The target field must be:
+- Visible on screen
+- Not disabled or read-only
+- Able to receive keyboard input
+- In the active window
+</Warning>
+
+## Advanced Usage
+
+### Paste Instead of Type
+```python
+# For large text, clipboard paste is faster
+Clipboard(mode="set", text=large_text)
+Click(label=5)
+Shortcut("ctrl+v")
+```
+
+### Type with Formatting Keys
+```python
+# Use Shortcut for formatting while typing
+Type(text="Bold text", label=5)
+Shortcut("ctrl+a")  # Select all
+Shortcut("ctrl+b")  # Bold
+```
+
+### Conditional Text Entry
+```python
+# Enter different text based on field state
+state = Snapshot()
+if "empty" in state:
+    Type(text="Default value", label=5)
+else:
+    Type(text=" (appended)", label=5, caret_position="end")
+```
+
+<Accordion title="Typing Speed and Performance">
+The Type tool uses `interval=0.02` (20ms between keystrokes) by default:
+- **Fast enough**: Doesn't trigger rate limiting in most apps
+- **Slow enough**: Gives UI time to process each keystroke
+- **Typical speed**: ~50 characters per second
+
+For very large text:
+- Consider using Clipboard + Paste (instant)
+- Or batch input with MultiEdit tool
+</Accordion>
+
+<Accordion title="Special Key Handling">
+Automatic transformations:
+- `\n` → Enter key
+- `\t` → Tab key
+- `{` → `{{}`
+- `}` → `{}}`
+- `\r` → Ignored
+
+For other special keys, use the Shortcut tool instead.
+</Accordion>
+
+## Related Tools
+
+- [Click](/tools/click) - Click input fields before typing
+- [Snapshot](/tools/snapshot) - Discover input field labels
+- [MultiEdit](/tools/multiedit) - Fill multiple fields at once
+- [Shortcut](/tools/shortcut) - Send special key combinations
+- [Clipboard](/tools/clipboard) - Alternative for large text via paste
+
+## Implementation Details
+
+From `desktop/service.py:603-625`:
+
+```python
+def type(
+    self,
+    loc: tuple[int, int],
+    text: str,
+    caret_position: Literal["start", "idle", "end"] = "idle",
+    clear: bool | str = False,
+    press_enter: bool | str = False,
+):
+    x, y = loc
+    uia.Click(x, y)  # Focus field
+    if caret_position == "start":
+        uia.SendKeys("{Home}", waitTime=0.05)
+    elif caret_position == "end":
+        uia.SendKeys("{End}", waitTime=0.05)
+    if clear is True or (isinstance(clear, str) and clear.lower() == "true"):
+        sleep(0.5)
+        uia.SendKeys("{Ctrl}a", waitTime=0.05)
+        uia.SendKeys("{Back}", waitTime=0.05)
+    escaped_text = _escape_text_for_sendkeys(text)
+    uia.SendKeys(escaped_text, interval=0.02, waitTime=0.05)
+    if press_enter is True or (isinstance(press_enter, str) and press_enter.lower() == "true"):
+        uia.SendKeys("{Enter}", waitTime=0.05)
+```
+
+- Automatically escapes special characters
+- Includes implicit click for focus
+- 20ms interval between keystrokes for reliability

@@ -1,0 +1,389 @@
+---
+title: Tree Service
+description: UI Automation tree traversal and element discovery
+---
+
+## Overview
+
+The Tree service (`tree/service.py`) captures the Windows UI Automation accessibility tree to discover interactive and scrollable elements. It performs multi-threaded UI traversal and supports both standard Windows applications and browser DOM extraction.
+
+## Key Classes
+
+### Tree
+
+Core service for UI element discovery and tree state management.
+
+<ParamField path="desktop" type="Desktop">
+  Weak reference to parent Desktop service
+</ParamField>
+
+<ParamField path="screen_size" type="Size">
+  Current screen dimensions
+</ParamField>
+
+<ParamField path="screen_box" type="BoundingBox">
+  Full screen bounding box for coordinate validation
+</ParamField>
+
+<ParamField path="dom" type="Control | None">
+  Reference to browser DOM root element (if browser is active)
+</ParamField>
+
+<ParamField path="tree_state" type="TreeState | None">
+  Cached tree state from last traversal
+</ParamField>
+
+## Core Methods
+
+### get_state()
+
+Capture complete UI tree state for all windows.
+
+```python
+def get_state(
+    self,
+    active_window_handle: int | None,
+    other_windows_handles: list[int],
+    use_dom: bool = False
+) -> TreeState
+```
+
+<ParamField path="active_window_handle" type="int | None">
+  Handle of the currently focused window (processed first)
+</ParamField>
+
+<ParamField path="other_windows_handles" type="list[int]">
+  Handles of background windows to process
+</ParamField>
+
+<ParamField path="use_dom" type="bool" default={false}>
+  Extract browser DOM elements instead of browser UI
+</ParamField>
+
+<ResponseField name="TreeState" type="TreeState">
+  Contains root node, interactive nodes, scrollable nodes, and optional DOM nodes
+</ResponseField>
+
+### tree_traversal()
+
+Recursively traverse UI Automation tree to discover elements.
+
+```python
+def tree_traversal(
+    self,
+    node: Control,
+    window_bounding_box: Rect,
+    window_name: str,
+    is_browser: bool,
+    interactive_nodes: list[TreeElementNode] | None = None,
+    scrollable_nodes: list[ScrollElementNode] | None = None,
+    dom_interactive_nodes: list[TreeElementNode] | None = None,
+    dom_informative_nodes: list[TextElementNode] | None = None,
+    is_dom: bool = False,
+    is_dialog: bool = False,
+    element_cache_req: Any | None = None,
+    children_cache_req: Any | None = None,
+)
+```
+
+<ParamField path="node" type="Control">
+  Current UI Automation element to process
+</ParamField>
+
+<ParamField path="window_bounding_box" type="Rect">
+  Window boundaries for coordinate clipping
+</ParamField>
+
+<ParamField path="is_browser" type="bool">
+  Whether the window is a browser (enables DOM detection)
+</ParamField>
+
+<ParamField path="element_cache_req" type="CacheRequest">
+  UI Automation cache request for optimized property access
+</ParamField>
+
+### get_nodes()
+
+Extract interactive, scrollable, and informative nodes from a window.
+
+```python
+def get_nodes(
+    self,
+    handle: int,
+    is_browser: bool = False,
+    wait_time: float = 0,
+    use_dom: bool = False
+) -> tuple[list[TreeElementNode], list[ScrollElementNode], list[TextElementNode]]
+```
+
+<ResponseField name="interactive_nodes" type="list[TreeElementNode]">
+  Clickable/typable elements (buttons, inputs, links)
+</ResponseField>
+
+<ResponseField name="scrollable_nodes" type="list[ScrollElementNode]">
+  Elements with vertical scroll capability
+</ResponseField>
+
+<ResponseField name="informative_nodes" type="list[TextElementNode]">
+  Text content from DOM (browser only)
+</ResponseField>
+
+### iou_bounding_box()
+
+Clip element bounding boxes to window and screen boundaries.
+
+```python
+def iou_bounding_box(
+    self,
+    window_box: Rect,
+    element_box: Rect
+) -> BoundingBox
+```
+
+<ResponseField name="BoundingBox" type="BoundingBox">
+  Clipped bounding box or zero-size box if element is outside bounds
+</ResponseField>
+
+## Data Models
+
+### TreeState
+
+Complete UI element tree state.
+
+```python
+@dataclass
+class TreeState:
+    status: bool = True
+    root_node: TreeElementNode | None = None
+    dom_node: ScrollElementNode | None = None
+    interactive_nodes: list[TreeElementNode] = field(default_factory=list)
+    scrollable_nodes: list[ScrollElementNode] = field(default_factory=list)
+    dom_informative_nodes: list[TextElementNode] = field(default_factory=list)
+```
+
+<Expandable title="TreeState Fields">
+  <ResponseField name="status" type="bool">
+    `True` if all windows captured successfully, `False` if some failed
+  </ResponseField>
+
+  <ResponseField name="root_node" type="TreeElementNode">
+    Desktop root node representing the entire screen
+  </ResponseField>
+
+  <ResponseField name="interactive_nodes" type="list[TreeElementNode]">
+    All clickable/typable elements (buttons, inputs, links, etc.)
+  </ResponseField>
+
+  <ResponseField name="scrollable_nodes" type="list[ScrollElementNode]">
+    Elements with scrolling capability and scroll position metadata
+  </ResponseField>
+
+  <ResponseField name="dom_node" type="ScrollElementNode | None">
+    Browser document root with scroll information (if browser active)
+  </ResponseField>
+
+  <ResponseField name="dom_informative_nodes" type="list[TextElementNode]">
+    Text content extracted from browser DOM
+  </ResponseField>
+</Expandable>
+
+### TreeElementNode
+
+Represents a single interactive UI element.
+
+```python
+@dataclass
+class TreeElementNode:
+    bounding_box: BoundingBox
+    center: Center
+    name: str = ""
+    control_type: str = ""
+    window_name: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+```
+
+<Expandable title="Metadata Fields">
+  - **has_focused** (bool): Whether element currently has keyboard focus
+  - **shortcut** (str): Accelerator key if available (e.g., "Alt+F")
+  - **help_text** (str): Accessibility help text
+  - **value** (str): Current value for inputs/edits
+  - **is_password** (bool): Whether input is password field
+  - **toggle_state** (str): "on" or "off" for checkboxes
+  - **expand_collapse_state** (str): "expanded", "collapsed", or "partially expanded"
+  - **is_selected** (bool): Whether item is selected
+</Expandable>
+
+### ScrollElementNode
+
+Represents a scrollable container with scroll state.
+
+```python
+@dataclass
+class ScrollElementNode:
+    name: str
+    control_type: str
+    window_name: str
+    bounding_box: BoundingBox
+    center: Center
+    metadata: dict[str, Any] = field(default_factory=dict)
+```
+
+<Expandable title="Scroll Metadata">
+  - **has_focused** (bool): Whether container has focus
+  - **horizontal_scrollable** (bool): Can scroll horizontally
+  - **horizontal_scroll_percent** (float): Horizontal scroll position (0-100)
+  - **vertical_scrollable** (bool): Can scroll vertically
+  - **vertical_scroll_percent** (float): Vertical scroll position (0-100)
+</Expandable>
+
+### TextElementNode
+
+Text content from browser DOM.
+
+```python
+@dataclass
+class TextElementNode:
+    text: str
+```
+
+### BoundingBox
+
+Element screen coordinates.
+
+```python
+@dataclass
+class BoundingBox:
+    left: int
+    top: int
+    right: int
+    bottom: int
+    width: int
+    height: int
+```
+
+### Center
+
+Element center point.
+
+```python
+@dataclass
+class Center:
+    x: int
+    y: int
+```
+
+## Configuration
+
+Key constants from `tree/config.py`:
+
+```python
+THREAD_MAX_RETRIES = 3  # Retry attempts for failed window captures
+
+INTERACTIVE_CONTROL_TYPE_NAMES = {
+    "ButtonControl", "CheckBoxControl", "ComboBoxControl",
+    "EditControl", "HyperlinkControl", "ListItemControl",
+    "MenuItemControl", "RadioButtonControl", "TabItemControl",
+    "SliderControl", "SpinnerControl", ...
+}
+
+DOCUMENT_CONTROL_TYPE_NAMES = {
+    "DocumentControl"
+}
+
+INFORMATIVE_CONTROL_TYPE_NAMES = {
+    "TextControl", "ImageControl"
+}
+
+INTERACTIVE_ROLES = {
+    "check box", "combo box", "editable text", "link",
+    "list item", "menu item", "push button", "radio button", ...
+}
+```
+
+## Usage Examples
+
+### Capture UI Tree
+
+```python
+from windows_mcp.desktop.service import Desktop
+
+desktop = Desktop()
+tree = desktop.tree
+
+# Get all window handles
+handles = desktop.get_controls_handles()
+active_handle = 123456  # Current window
+other_handles = list(handles - {active_handle})
+
+# Capture tree
+tree_state = tree.get_state(
+    active_window_handle=active_handle,
+    other_windows_handles=other_handles,
+    use_dom=False
+)
+
+print(f"Status: {tree_state.status}")
+print(f"Interactive elements: {len(tree_state.interactive_nodes)}")
+print(f"Scrollable elements: {len(tree_state.scrollable_nodes)}")
+```
+
+### Process Interactive Elements
+
+```python
+for idx, node in enumerate(tree_state.interactive_nodes):
+    print(f"[{idx}] {node.control_type}: {node.name}")
+    print(f"    Location: ({node.center.x}, {node.center.y})")
+    print(f"    Window: {node.window_name}")
+    
+    if node.metadata.get("has_focused"):
+        print("    [FOCUSED]")
+    
+    if "value" in node.metadata:
+        print(f"    Value: {node.metadata['value']}")
+```
+
+### Browser DOM Extraction
+
+```python
+# Capture browser DOM instead of UI elements
+tree_state = tree.get_state(
+    active_window_handle=browser_handle,
+    other_windows_handles=[],
+    use_dom=True  # Extract DOM elements
+)
+
+if tree_state.dom_node:
+    dom = tree_state.dom_node
+    print(f"Vertical scroll: {dom.metadata['vertical_scroll_percent']}%")
+    
+    # Extract text content
+    for text_node in tree_state.dom_informative_nodes:
+        print(text_node.text)
+```
+
+### Check Scroll State
+
+```python
+for idx, scroll_node in enumerate(tree_state.scrollable_nodes):
+    meta = scroll_node.metadata
+    if meta.get("vertical_scrollable"):
+        percent = meta.get("vertical_scroll_percent", 0)
+        print(f"[{idx}] {scroll_node.name}: {percent}% scrolled")
+        
+        if percent < 100:
+            print("  → Can scroll down")
+```
+
+## Performance Considerations
+
+- **Sequential Processing**: Windows are processed sequentially to avoid COM apartment threading deadlocks (tree/service.py:85)
+- **Retry Logic**: Failed window captures are retried up to 3 times with exponential backoff (tree/service.py:110)
+- **Caching**: Uses UI Automation cache requests to minimize property access overhead (tree/service.py:580)
+- **Clipping**: Bounding boxes are clipped to screen/window bounds to filter out-of-view elements (tree/service.py:140)
+
+## Source Location
+
+- **Implementation**: `src/windows_mcp/tree/service.py` (tree/service.py:18)
+- **Data Models**: `src/windows_mcp/tree/views.py` (tree/views.py:10)
+- **Configuration**: `src/windows_mcp/tree/config.py`
+- **Cache Utilities**: `src/windows_mcp/tree/cache_utils.py`

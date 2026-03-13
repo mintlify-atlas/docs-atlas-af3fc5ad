@@ -1,0 +1,339 @@
+---
+title: WatchDog Service
+description: UI Automation event monitoring service
+---
+
+## Overview
+
+The WatchDog service (`watchdog/service.py`) monitors Windows UI Automation events in a dedicated background thread. It tracks focus changes, structure changes, and property changes to keep the UI state current without polling.
+
+## Architecture
+
+WatchDog runs in a Single-Threaded Apartment (STA) thread pumping COM events. It supports three event types:
+
+- **Focus events**: Track which UI element has keyboard focus
+- **Structure events**: Detect when UI elements are added/removed
+- **Property events**: Monitor when element properties change (name, value, toggle state, etc.)
+
+## Key Classes
+
+### WatchDog
+
+Main service class for event monitoring.
+
+```python
+class WatchDog:
+    def __init__(self)
+```
+
+<ParamField path="uia_client" type="_AutomationClient">
+  Reference to UI Automation singleton
+</ParamField>
+
+<ParamField path="uia" type="IUIAutomation">
+  COM automation interface
+</ParamField>
+
+<ParamField path="is_running" type="Event">
+  Threading event for service lifecycle
+</ParamField>
+
+<ParamField path="thread" type="Thread | None">
+  Background thread running the event loop
+</ParamField>
+
+## Core Methods
+
+### start()
+
+Start the background event monitoring thread.
+
+```python
+def start(self)
+```
+
+Starts a daemon thread named `"WatchDogThread"` that:
+1. Initializes COM with `CoInitialize()`
+2. Registers configured event handlers
+3. Pumps events with `PumpEvents(0.1)`
+4. Cleans up handlers on exit
+
+### stop()
+
+Stop the background thread and unregister handlers.
+
+```python
+def stop(self)
+```
+
+Waits up to 2 seconds for thread to terminate gracefully.
+
+### set_focus_callback()
+
+Register callback for focus change events.
+
+```python
+def set_focus_callback(self, callback: Callable | None)
+```
+
+<ParamField path="callback" type="Callable[[ctypes.POINTER], None] | None">
+  Function called when focus changes. Receives `IUIAutomationElement` pointer. Pass `None` to disable.
+</ParamField>
+
+**Example:**
+
+```python
+def on_focus_change(sender):
+    element = Control.CreateControlFromElement(sender)
+    print(f"Focus: {element.Name} ({element.ControlTypeName})")
+
+watchdog.set_focus_callback(on_focus_change)
+```
+
+### set_structure_callback()
+
+Register callback for structure change events.
+
+```python
+def set_structure_callback(
+    self,
+    callback: Callable | None,
+    element: Any = None
+)
+```
+
+<ParamField path="callback" type="Callable[[Any, StructureChangeType, list], None] | None">
+  Function called when UI structure changes. Pass `None` to disable.
+</ParamField>
+
+<ParamField path="element" type="IUIAutomationElement | None">
+  Root element to monitor (defaults to Desktop if `None`)
+</ParamField>
+
+**Structure change types:**
+- `ChildAdded`: New element added
+- `ChildRemoved`: Element removed
+- `ChildrenInvalidated`: Children list changed
+- `ChildrenBulkAdded`: Multiple children added
+- `ChildrenBulkRemoved`: Multiple children removed
+
+### set_property_callback()
+
+Register callback for property change events.
+
+```python
+def set_property_callback(
+    self,
+    callback: Callable | None,
+    element: Any = None,
+    property_ids: list[int] | None = None
+)
+```
+
+<ParamField path="callback" type="Callable[[Any, int, Any], None] | None">
+  Function called when monitored properties change. Pass `None` to disable.
+</ParamField>
+
+<ParamField path="element" type="IUIAutomationElement | None">
+  Root element to monitor (defaults to Desktop)
+</ParamField>
+
+<ParamField path="property_ids" type="list[int] | None">
+  List of PropertyId values to monitor. Defaults to `[30005, 30045, 30093, 30128]` (Name, Value, LegacyIAccessibleValue, ToggleState)
+</ParamField>
+
+**Common property IDs:**
+- `30005`: Name
+- `30045`: Value
+- `30093`: LegacyIAccessibleValue
+- `30128`: ToggleState
+
+See `uia/enums.py` for complete PropertyId list.
+
+## Context Manager Support
+
+WatchDog supports context manager protocol:
+
+```python
+with WatchDog() as watchdog:
+    watchdog.set_focus_callback(on_focus)
+    # ... do work ...
+# Automatically stops on exit
+```
+
+## Event Handlers
+
+Internal handler implementations from `watchdog/event_handlers.py`:
+
+### FocusChangedEventHandler
+
+Handles focus change events.
+
+```python
+class FocusChangedEventHandler:
+    def HandleFocusChangedEvent(
+        self,
+        sender: ctypes.POINTER
+    ) -> int
+```
+
+Called by UI Automation when keyboard focus changes. Invokes the user callback set via `set_focus_callback()`.
+
+### StructureChangedEventHandler
+
+Handles UI structure change events.
+
+```python
+class StructureChangedEventHandler:
+    def HandleStructureChangedEvent(
+        self,
+        sender: ctypes.POINTER,
+        changeType: int,
+        runtimeId: ctypes.POINTER(ctypes.c_int)
+    ) -> int
+```
+
+### PropertyChangedEventHandler
+
+Handles property change events.
+
+```python
+class PropertyChangedEventHandler:
+    def HandlePropertyChangedEvent(
+        self,
+        sender: ctypes.POINTER,
+        propertyId: int,
+        newValue: comtypes.VARIANT
+    ) -> int
+```
+
+## Usage Examples
+
+### Basic Focus Monitoring
+
+```python
+from windows_mcp.watchdog.service import WatchDog
+from windows_mcp.uia import Control
+import time
+
+def on_focus(sender):
+    element = Control.CreateControlFromElement(sender)
+    print(f"Focus changed to: {element.Name}")
+
+watchdog = WatchDog()
+watchdog.set_focus_callback(on_focus)
+watchdog.start()
+
+try:
+    time.sleep(60)  # Monitor for 60 seconds
+finally:
+    watchdog.stop()
+```
+
+### Monitor Specific Window
+
+```python
+from windows_mcp.watchdog.service import WatchDog
+import windows_mcp.uia as uia
+
+def on_structure_change(sender, change_type, runtime_id):
+    print(f"Structure change: {change_type}")
+
+# Get specific window to monitor
+window = uia.WindowControl(Name="Calculator")
+if window.Exists():
+    watchdog = WatchDog()
+    watchdog.set_structure_callback(
+        callback=on_structure_change,
+        element=window.Element  # Monitor only Calculator
+    )
+    watchdog.start()
+```
+
+### Monitor Property Changes
+
+```python
+from windows_mcp.watchdog.service import WatchDog
+from windows_mcp.uia import PropertyId
+
+def on_property_change(sender, property_id, new_value):
+    if property_id == PropertyId.NameProperty:
+        print(f"Name changed to: {new_value}")
+    elif property_id == PropertyId.ValueProperty:
+        print(f"Value changed to: {new_value}")
+
+watchdog = WatchDog()
+watchdog.set_property_callback(
+    callback=on_property_change,
+    property_ids=[PropertyId.NameProperty, PropertyId.ValueProperty]
+)
+watchdog.start()
+```
+
+### Integration with Tree Service
+
+From `__main__.py` showing production usage:
+
+```python
+from windows_mcp.desktop.service import Desktop
+from windows_mcp.watchdog.service import WatchDog
+
+desktop = Desktop()
+watchdog = WatchDog()
+
+# Connect watchdog to tree service
+watchdog.set_focus_callback(desktop.tree.on_focus_change)
+watchdog.start()
+
+# Tree service debounces duplicate events (tree/service.py:612)
+```
+
+### Context Manager Pattern
+
+```python
+from windows_mcp.watchdog.service import WatchDog
+import time
+
+def on_focus(sender):
+    print("Focus changed")
+
+with WatchDog() as watchdog:
+    watchdog.set_focus_callback(on_focus)
+    time.sleep(30)
+# Automatically calls watchdog.stop()
+```
+
+## Performance Notes
+
+- **STA Threading**: Runs in Single-Threaded Apartment to avoid COM marshaling overhead (watchdog/service.py:90)
+- **Event Pumping**: Uses `PumpEvents(0.1)` for 100ms polling interval (watchdog/service.py:196)
+- **Debouncing**: The Tree service debounces duplicate focus events within 1 second (tree/service.py:615)
+- **Handler Registration**: Handlers are dynamically registered/unregistered as callbacks are set/cleared (watchdog/service.py:94-193)
+
+## Troubleshooting
+
+### Events Not Firing
+
+1. Ensure `start()` was called
+2. Check callback is not `None`
+3. Verify element scope (Desktop vs specific window)
+4. Some applications don't fire UI Automation events
+
+### Thread Not Stopping
+
+If `stop()` times out after 2 seconds:
+- Thread may be blocked in event handler
+- Ensure handlers don't block indefinitely
+- Use daemon threads for background work in handlers
+
+### COM Errors
+
+- `CoInitialize()` called automatically in thread
+- Don't call UI Automation from handler callback (marshaling issues)
+- Queue events and process in main thread if needed
+
+## Source Location
+
+- **Implementation**: `src/windows_mcp/watchdog/service.py` (watchdog/service.py:23)
+- **Event Handlers**: `src/windows_mcp/watchdog/event_handlers.py`
+- **Usage**: `src/windows_mcp/__main__.py` (__main__.py:59)

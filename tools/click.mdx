@@ -1,0 +1,269 @@
+---
+title: Click
+description: Perform mouse clicks at coordinates or on UI elements
+---
+
+The **Click** tool performs mouse button clicks at specified coordinates or on UI elements identified by Snapshot labels. Supports left, right, and middle button clicks with single, double, or hover-only actions.
+
+## Purpose & Use Cases
+
+- **UI Activation**: Click buttons, links, menu items, and controls
+- **Selection**: Select files, text, or list items with single clicks
+- **Context Menus**: Right-click to open context menus
+- **Double-Click Actions**: Open files or folders with double-clicks
+- **Hover Effects**: Trigger tooltips or hover states without clicking
+- **Middle-Click**: Open links in new tabs or trigger application-specific actions
+
+## Parameters
+
+<ParamField path="loc" type="array" optional>
+  Exact coordinates `[x, y]` to click. Either `loc` or `label` must be provided.
+  
+  Example: `[640, 480]`
+</ParamField>
+
+<ParamField path="label" type="integer" optional>
+  UI element label from Snapshot output. Either `loc` or `label` must be provided.
+  Click will target the center of the labeled element.
+</ParamField>
+
+<ParamField path="button" type="string" default="left">
+  Mouse button to use:
+  - `"left"`: Primary button for selection and activation
+  - `"right"`: Secondary button for context menus
+  - `"middle"`: Middle mouse button (wheel click)
+</ParamField>
+
+<ParamField path="clicks" type="integer" default="1">
+  Number of clicks to perform:
+  - `0`: Hover only (move cursor without clicking)
+  - `1`: Single click (select/focus)
+  - `2`: Double click (open/activate)
+  - Higher values: Multiple rapid clicks
+</ParamField>
+
+## Return Values
+
+Returns a success message:
+```
+"Single left clicked at (640,480)."
+"Double left clicked at (100,200)."
+"Hover at (300,400)."
+```
+
+Throws error if:
+- Neither `loc` nor `label` provided
+- `label` is out of range
+- Desktop state is empty (call Snapshot first)
+- Coordinates are invalid
+
+## Code Examples
+
+### Click by Label (Recommended)
+```python
+# 1. Capture UI state
+state = Snapshot(use_vision=True)
+
+# 2. Identify button label from output (e.g., label 10 is "Submit")
+
+# 3. Click the button
+Click(label=10)
+```
+
+### Click by Coordinates
+```python
+# Click at specific screen coordinates
+Click(loc=[640, 480])
+```
+
+### Right-Click for Context Menu
+```python
+# Right-click a file to open context menu
+state = Snapshot(use_vision=True)
+Click(label=15, button="right")
+Wait(duration=0.5)
+
+# Click "Delete" option in menu
+Click(label=20)
+```
+
+### Double-Click to Open
+```python
+# Double-click to open a file or folder
+state = Snapshot(use_vision=True)
+Click(label=8, clicks=2)
+```
+
+### Hover Without Clicking
+```python
+# Hover to reveal tooltip or submenu
+Click(label=12, clicks=0)
+Wait(duration=1)  # Give time for tooltip to appear
+```
+
+### Middle-Click for New Tab
+```python
+# Middle-click a link to open in new tab
+state = Snapshot(use_vision=True)
+Click(label=25, button="middle")
+```
+
+## Common Patterns
+
+### Button Click Workflow
+```python
+# Standard button interaction
+Snapshot(use_vision=True)
+Click(label=5)  # Click button
+Wait(duration=1)  # Wait for action to complete
+Snapshot(use_vision=True)  # Verify result
+```
+
+### Menu Navigation
+```python
+# Navigate through menus
+Click(label=1)  # Open main menu
+Wait(duration=0.3)
+Snapshot()
+Click(label=10)  # Click submenu item
+Wait(duration=0.3)
+Snapshot()
+Click(label=15)  # Click final option
+```
+
+### File Selection
+```python
+# Single file selection
+App(mode="launch", name="explorer")
+Wait(duration=2)
+Snapshot(use_vision=True)
+Click(label=20)  # Select file
+Shortcut("ctrl+c")  # Copy
+```
+
+### Dialog Box Interaction
+```python
+# Handle confirmation dialog
+Snapshot()
+if "Are you sure" in state:
+    Click(label=5)  # Click "Yes" button
+else:
+    Click(label=6)  # Click "No" button
+```
+
+## Best Practices
+
+<Tip>
+**Use Labels Over Coordinates**
+- Labels automatically target the center of UI elements
+- More reliable when window positions change
+- Self-documenting (element name visible in Snapshot output)
+</Tip>
+
+<Tip>
+**Wait Between Clicks**
+- Add `Wait(duration=0.5)` after clicks that trigger UI changes
+- Allows animations and state transitions to complete
+- Prevents race conditions in automation scripts
+</Tip>
+
+<Tip>
+**Verify State Before Clicking**
+- Always call Snapshot before Click to ensure element exists
+- Check that the expected window is active
+- Validate labels are within range
+</Tip>
+
+<Warning>
+**Double-Click Timing**
+Double-clicks use the system's configured double-click speed. If double-clicks aren't working:
+- Increase the wait time between clicks
+- Check Windows mouse settings
+- Some applications may require triple-clicks for certain actions
+</Warning>
+
+<Warning>
+**Hover-Only Clicks**
+When using `clicks=0` for hover:
+- The cursor moves but no button press occurs
+- Some applications require actual hover time to trigger effects
+- Add `Wait()` after hover to allow UI to respond
+</Warning>
+
+## Advanced Usage
+
+### Rapid Multi-Click
+```python
+# Perform 5 rapid clicks (for games or specific apps)
+Click(label=10, clicks=5)
+```
+
+### Click and Drag Pattern
+```python
+# Click to start, then drag to end position
+Click(label=5)  # Click starting element
+Move(loc=[800, 600], drag=True)  # Drag to destination
+```
+
+### Conditional Clicking
+```python
+# Click different elements based on state
+state = Snapshot()
+if "Error" in state:
+    Click(label=8)  # Click "Retry" button
+elif "Success" in state:
+    Click(label=9)  # Click "Continue" button
+```
+
+<Accordion title="Coordinate-Based vs Label-Based Clicking">
+**Label-Based (Recommended)**
+- Pros: Reliable, self-documenting, adapts to window movement
+- Cons: Requires Snapshot call first, slower for simple tasks
+- Use when: Automating complex UIs, handling dynamic content
+
+**Coordinate-Based**
+- Pros: Faster, no Snapshot needed, works for any screen area
+- Cons: Brittle (breaks if window moves), requires manual coordinate discovery
+- Use when: Quick one-off tasks, clicking known fixed positions
+</Accordion>
+
+## Related Tools
+
+- [Snapshot](/tools/snapshot) - Discover UI elements and their labels
+- [Type](/tools/type) - Enter text after clicking input fields
+- [Move](/tools/move) - Move cursor without clicking
+- [MultiSelect](/tools/multiselect) - Click multiple elements in sequence
+- [Shortcut](/tools/shortcut) - Alternative to clicking menu items
+
+## Implementation Details
+
+From `desktop/service.py:580-602`:
+
+```python
+def click(self, loc: tuple[int, int]|list[int], button: str = "left", clicks: int = 2):
+    if isinstance(loc, list):
+        x, y = loc[0], loc[1]
+    else:
+        x, y = loc
+    if clicks == 0:
+        uia.SetCursorPos(x, y)  # Hover only
+        return
+    match button:
+        case "left":
+            if clicks >= 2:
+                dbl_wait = uia.GetDoubleClickTime() / 2000.0
+                for i in range(clicks):
+                    uia.Click(x, y, waitTime=dbl_wait if i < clicks - 1 else 0.5)
+            else:
+                uia.Click(x, y)
+        case "right":
+            for _ in range(clicks):
+                uia.RightClick(x, y)
+        case "middle":
+            for _ in range(clicks):
+                uia.MiddleClick(x, y)
+```
+
+- Uses Windows UIAutomation for input simulation
+- Respects system double-click timing for multi-click actions
+- Supports all standard mouse buttons

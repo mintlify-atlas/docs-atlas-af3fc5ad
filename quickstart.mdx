@@ -1,80 +1,342 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Get Windows-MCP running in 5 minutes and execute your first automation
 ---
 
-## Get started in three steps
+## Prerequisites
 
-Get your documentation site running locally and make your first customization.
+Before you begin, ensure you have:
 
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+<Steps>
+  <Step title="Python 3.13+">
+    Check your Python version:
+    ```bash
+    python --version
+    ```
+    Download Python 3.13+ from [python.org](https://www.python.org/downloads/) if needed.
+  </Step>
+  
+  <Step title="UV Package Manager">
+    Install UV (Astral's fast package manager):
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    <CodeGroup>
+    ```bash Windows (PowerShell)
+    pip install uv
+    ```
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```bash Unix/Linux
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+    </CodeGroup>
+  </Step>
+  
+  <Step title="Claude Desktop">
+    Download and install [Claude Desktop](https://claude.ai/download) (or another MCP-compatible client).
+  </Step>
+</Steps>
 
-### Step 2: Deploy your changes
+## Installation
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+The fastest way to get started is using PyPI with `uvx`:
+
+<Steps>
+  <Step title="Locate Configuration File">
+    Open Claude Desktop and click on your profile icon, then navigate to **Settings > Developer > Edit Config**.
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    This will open `claude_desktop_config.json` in your default text editor.
+    
+    <Note>
+      The config file is typically located at:
+      ```
+      %APPDATA%\Claude\claude_desktop_config.json
+      ```
+    </Note>
+  </Step>
+  
+  <Step title="Add Windows-MCP Configuration">
+    Add the following configuration to your `claude_desktop_config.json`:
+    
+    ```json
+    {
+      "mcpServers": {
+        "windows-mcp": {
+          "command": "uvx",
+          "args": [
+            "windows-mcp"
+          ]
+        }
+      }
+    }
+    ```
+    
+    Save the file.
+  </Step>
+  
+  <Step title="Restart Claude Desktop">
+    Close and reopen Claude Desktop for the changes to take effect.
+    
+    <Warning>
+      The first time Windows-MCP starts, it may take 1-2 minutes to install dependencies. If the server times out, simply restart Claude Desktop.
+    </Warning>
+  </Step>
+  
+  <Step title="Verify Installation">
+    In Claude Desktop, look for the MCP tools icon (🔌) in the chat interface. Click it to see the available Windows-MCP tools.
+    
+    You should see 15+ tools including App, PowerShell, FileSystem, Snapshot, Click, Type, and more.
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## Your First Automation
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+Now let's run a simple automation to verify everything works:
 
-### Step 3: Go live
+<Steps>
+  <Step title="Take a Snapshot">
+    In Claude Desktop, type:
+    ```
+    Take a snapshot of my desktop
+    ```
+    
+    Claude will use the **Snapshot** tool to capture:
+    - Current cursor position
+    - Active and background windows
+    - Interactive UI elements (buttons, text fields, links) with coordinates
+    - Scrollable areas
+    
+    You should see a detailed text output describing your desktop state.
+  </Step>
+  
+  <Step title="Open Notepad">
+    Ask Claude to open an application:
+    ```
+    Open Notepad
+    ```
+    
+    Claude will use the **App** tool in `launch` mode to open Notepad from the Start menu.
+    
+    <Note>
+      Windows-MCP can launch any application accessible via the Windows Start menu. Just use the application's common name.
+    </Note>
+  </Step>
+  
+  <Step title="Type Some Text">
+    Now let's type text into Notepad:
+    ```
+    Type "Hello from Windows-MCP!" in Notepad
+    ```
+    
+    Claude will:
+    1. Take a snapshot to find the Notepad text area
+    2. Click on it to focus
+    3. Use the **Type** tool to enter the text
+    
+    You should see the text appear in Notepad!
+  </Step>
+  
+  <Step title="Execute a PowerShell Command">
+    Let's try a system command:
+    ```
+    Show me the current date and time using PowerShell
+    ```
+    
+    Claude will use the **PowerShell** tool to execute `Get-Date` and return the result.
+  </Step>
+</Steps>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+## Example: Complete Workflow
 
-## Next steps
+Here's a more complex example that demonstrates multiple tools working together:
 
-Now that you have your docs running, explore these key features:
+```text
+Create a new text file on my desktop called "tasks.txt" and add the following:
+- Review pull requests
+- Update documentation
+- Fix bug #123
+```
+
+Claude will automatically:
+
+1. **Snapshot**: Capture desktop state to understand the environment
+2. **FileSystem**: Use the `write` mode to create `tasks.txt` on the desktop with the content
+3. **App**: Optionally open the file in Notepad to confirm
+
+You can verify the file was created by checking your desktop.
+
+## Understanding Tool Interactions
+
+Windows-MCP tools work together seamlessly. Here's a typical workflow:
+
+<Steps>
+  <Step title="Observe (Snapshot)">
+    The **Snapshot** tool is always called first to understand the current desktop state, including:
+    - What windows are open
+    - What UI elements are available
+    - Where elements are located (coordinates)
+    - What's scrollable
+  </Step>
+  
+  <Step title="Navigate (Click, Scroll, Move)">
+    Based on the snapshot, Claude uses navigation tools to:
+    - Click on buttons, links, or menu items
+    - Scroll through content
+    - Move the mouse to specific locations
+  </Step>
+  
+  <Step title="Input (Type, Shortcut)">
+    Input tools allow Claude to:
+    - Type text into fields
+    - Execute keyboard shortcuts (Ctrl+S, Alt+Tab, etc.)
+  </Step>
+  
+  <Step title="Execute (App, PowerShell, FileSystem)">
+    System-level tools enable Claude to:
+    - Launch applications
+    - Run shell commands
+    - Manage files and folders
+  </Step>
+</Steps>
+
+## Common Patterns
+
+### Web Automation with DOM Mode
+
+```text
+Open Chrome, go to https://example.com, and extract all the article titles
+```
+
+Claude will:
+1. Launch Chrome using **App**
+2. Type the URL and press Enter
+3. Use **Snapshot** with `use_dom=True` to extract web page content (not browser UI)
+4. Parse and return article titles
+
+### Multi-Step Form Filling
+
+```text
+Fill out the registration form with:
+Name: John Doe
+Email: john@example.com
+Phone: 555-0123
+```
+
+Claude will:
+1. Take a **Snapshot** to locate form fields
+2. Use **MultiEdit** to fill all fields at once for efficiency
+3. Optionally click the submit button
+
+### File Operations
+
+```text
+Find all .log files on my desktop and move them to a folder called "logs"
+```
+
+Claude will:
+1. Use **FileSystem** with `search` mode to find `.log` files
+2. Use **FileSystem** with `copy` or `move` mode to organize them
+3. Confirm the operation completed
+
+## Tips for Effective Usage
+
+<Warning>
+  **Important**: Windows-MCP has full system access. Be careful when asking Claude to delete files, modify the registry, or terminate processes. Always review actions before confirming destructive operations.
+</Warning>
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Be Specific" icon="crosshairs">
+    Provide clear instructions with exact names, paths, and values. Instead of "open the browser", say "open Chrome" or "open Firefox".
+  </Card>
+  
+  <Card title="Use Natural Language" icon="message">
+    You don't need to specify which tools to use—Claude will choose the right tools based on your request.
+  </Card>
+  
+  <Card title="Review Before Acting" icon="eye">
+    For destructive operations, Claude may ask for confirmation. Review the proposed actions carefully.
+  </Card>
+  
+  <Card title="Check Snapshots" icon="camera">
+    If automation isn't working as expected, ask Claude to "take a snapshot" to see what it observes on your desktop.
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Tools not appearing in Claude Desktop">
+    1. Verify `claude_desktop_config.json` is saved correctly
+    2. Restart Claude Desktop completely
+    3. Check Claude's developer console for errors (View > Developer > Toggle Developer Tools)
+    4. Ensure UV is installed and accessible: `uvx --version`
+  </Accordion>
+  
+  <Accordion title="Server timeout on first run">
+    This is normal! Windows-MCP installs dependencies on first run, which takes 1-2 minutes. Simply restart Claude Desktop and it should work.
+  </Accordion>
+  
+  <Accordion title="Application names not recognized">
+    Windows-MCP launches apps via the Start menu. Use the common name you'd type in the Start menu search (e.g., "Notepad", "Word", "Chrome").
+    
+    If an app doesn't launch, try:
+    - Using the exact Start menu name
+    - Disabling the App tool if your Windows language is not English
+    - Using PowerShell tool to launch via command: `Start-Process "path\to\app.exe"`
+  </Accordion>
+  
+  <Accordion title="Click/Type not working on specific elements">
+    1. Take a snapshot with `use_vision=True` to see what Claude observes
+    2. Check if the element has a label/ID in the interactive elements list
+    3. Try clicking by coordinates instead of label
+    4. Some applications block UI automation—try using keyboard shortcuts instead
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation Guide" icon="book" href="/installation">
+    Learn about all installation methods, including source installation and other MCP clients
+  </Card>
+  
+  <Card title="Tool Reference" icon="wrench" href="/tools">
+    Explore all 15+ tools in detail with parameters and examples
+  </Card>
+  
+  <Card title="Security Best Practices" icon="shield" href="https://github.com/CursorTouch/Windows-MCP/blob/main/SECURITY.md">
+    Understand security implications and deployment recommendations
+  </Card>
+  
+  <Card title="Tools Reference" icon="lightbulb" href="/tools/overview">
+    Browse all available automation tools
+  </Card>
+</CardGroup>
+
+## Disabling Telemetry
+
+By default, Windows-MCP collects anonymous usage data (tool names and errors only—no arguments or outputs). To disable:
+
+```json
+{
+  "mcpServers": {
+    "windows-mcp": {
+      "command": "uvx",
+      "args": [
+        "windows-mcp"
+      ],
+      "env": {
+        "ANONYMIZED_TELEMETRY": "false"
+      }
+    }
+  }
+}
+```
+
+Save and restart Claude Desktop.
+
+## Get Help
+
+If you run into issues:
+
+- Check the [GitHub Issues](https://github.com/CursorTouch/Windows-MCP/issues)
+- Join the [Discord community](https://discord.com/invite/Aue9Yj2VzS)
+- Follow [@CursorTouch](https://x.com/CursorTouch) for updates

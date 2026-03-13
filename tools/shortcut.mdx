@@ -1,0 +1,436 @@
+---
+title: Shortcut
+description: Execute keyboard shortcuts and key combinations
+---
+
+The **Shortcut** tool executes keyboard shortcuts by pressing key combinations. Supports all standard Windows shortcuts including modifier keys (Ctrl, Alt, Shift, Win) and special keys.
+
+## Purpose & Use Cases
+
+- **Quick Actions**: Copy, paste, save, undo, redo
+- **Window Management**: Switch apps, minimize, maximize, close
+- **System Commands**: Open Start menu, Task Manager, Run dialog
+- **Application Shortcuts**: Open menus, toggle features, navigation
+- **Text Editing**: Select all, find, replace, formatting
+- **Clipboard Operations**: Cut, copy, paste
+
+## Parameters
+
+<ParamField path="shortcut" type="string" required>
+  Keyboard shortcut using `+` to join keys. Format: `"modifier+modifier+key"`
+  
+  Examples:
+  - `"ctrl+c"` - Copy
+  - `"ctrl+shift+esc"` - Task Manager
+  - `"win+r"` - Run dialog
+  - `"alt+f4"` - Close window
+  - `"win"` - Start menu (single key)
+</ParamField>
+
+## Return Values
+
+Returns a success message:
+```
+"Pressed ctrl+c."
+"Pressed win+r."
+```
+
+## Supported Keys
+
+### Modifier Keys
+- `ctrl` / `control` - Control key
+- `alt` / `option` - Alt key (Option on Mac-style keyboards)
+- `shift` - Shift key
+- `win` / `windows` / `command` - Windows/Command key
+
+### Special Keys
+- `enter` - Enter/Return
+- `tab` - Tab
+- `esc` / `escape` - Escape
+- `space` / `spacebar` - Space
+- `backspace` / `back` - Backspace
+- `delete` / `del` - Delete
+- `home` - Home
+- `end` - End
+- `pageup` / `pgup` - Page Up
+- `pagedown` / `pgdn` - Page Down
+- `insert` - Insert
+- `capslock` / `capital` - Caps Lock
+- `scrolllock` / `scroll` - Scroll Lock
+
+### Arrow Keys
+- `left` / `leftarrow` - Left arrow
+- `right` / `rightarrow` - Right arrow
+- `up` / `uparrow` - Up arrow
+- `down` / `downarrow` - Down arrow
+
+### Function Keys
+- `f1` through `f12` - Function keys
+- `f13` through `f24` - Extended function keys (if available)
+
+### Character Keys
+- `a` through `z` - Letter keys
+- `0` through `9` - Number keys
+- Special characters: `-`, `=`, `[`, `]`, `;`, `'`, `,`, `.`, `/`, `\`
+
+## Code Examples
+
+### Clipboard Operations
+```python
+# Copy selected text
+Shortcut("ctrl+c")
+
+# Paste from clipboard
+Shortcut("ctrl+v")
+
+# Cut selected text
+Shortcut("ctrl+x")
+```
+
+### File Operations
+```python
+# Save file
+Shortcut("ctrl+s")
+
+# Save as
+Shortcut("ctrl+shift+s")
+
+# Open file
+Shortcut("ctrl+o")
+
+# Close window
+Shortcut("ctrl+w")
+
+# Force close window
+Shortcut("alt+f4")
+```
+
+### Text Editing
+```python
+# Select all
+Shortcut("ctrl+a")
+
+# Undo
+Shortcut("ctrl+z")
+
+# Redo
+Shortcut("ctrl+y")
+
+# Find
+Shortcut("ctrl+f")
+
+# Replace
+Shortcut("ctrl+h")
+```
+
+### Window Management
+```python
+# Switch between applications
+Shortcut("alt+tab")
+
+# Show desktop
+Shortcut("win+d")
+
+# Minimize window
+Shortcut("win+down")
+
+# Maximize window
+Shortcut("win+up")
+
+# Snap window left
+Shortcut("win+left")
+
+# Snap window right
+Shortcut("win+right")
+```
+
+### System Commands
+```python
+# Open Start menu
+Shortcut("win")
+
+# Open Run dialog
+Shortcut("win+r")
+
+# Open Task Manager
+Shortcut("ctrl+shift+esc")
+
+# Lock computer
+Shortcut("win+l")
+
+# Open Settings
+Shortcut("win+i")
+
+# Open File Explorer
+Shortcut("win+e")
+```
+
+### Browser Shortcuts
+```python
+# New tab
+Shortcut("ctrl+t")
+
+# Close tab
+Shortcut("ctrl+w")
+
+# Reopen closed tab
+Shortcut("ctrl+shift+t")
+
+# Focus address bar
+Shortcut("ctrl+l")
+
+# Refresh page
+Shortcut("f5")
+
+# Hard refresh (bypass cache)
+Shortcut("ctrl+f5")
+
+# Open developer tools
+Shortcut("f12")
+```
+
+## Common Patterns
+
+### Open Application via Run Dialog
+```python
+# Open Notepad
+Shortcut("win+r")
+Wait(duration=0.5)
+Type(text="notepad", press_enter=True)
+Wait(duration=1)
+```
+
+### Copy Content from Application
+```python
+# Select all and copy
+Shortcut("ctrl+a")
+Wait(duration=0.2)
+Shortcut("ctrl+c")
+Wait(duration=0.2)
+
+# Get clipboard content
+clipboard_content = Clipboard(mode="get")
+```
+
+### Navigate Browser Tabs
+```python
+# Open new tab and navigate
+Shortcut("ctrl+t")
+Wait(duration=0.3)
+Type(text="https://example.com", press_enter=True)
+Wait(duration=2)
+
+# Switch to previous tab
+Shortcut("ctrl+shift+tab")
+
+# Switch to next tab
+Shortcut("ctrl+tab")
+```
+
+### Format Text in Document
+```python
+# Select text
+Shortcut("ctrl+a")
+
+# Make bold
+Shortcut("ctrl+b")
+
+# Make italic
+Shortcut("ctrl+i")
+
+# Underline
+Shortcut("ctrl+u")
+```
+
+### Page Navigation
+```python
+# Scroll to top
+Shortcut("ctrl+home")
+
+# Scroll to bottom
+Shortcut("ctrl+end")
+
+# Page down
+Shortcut("pagedown")
+
+# Page up
+Shortcut("pageup")
+```
+
+### Screenshot Capture
+```python
+# Capture full screen to clipboard
+Shortcut("win+printscreen")
+
+# Open Snipping Tool
+Shortcut("win+shift+s")
+```
+
+## Best Practices
+
+<Tip>
+**Wait After Shortcuts**
+Always add a small wait after shortcuts that trigger UI changes:
+```python
+Shortcut("ctrl+o")  # Open file dialog
+Wait(duration=0.5)  # Wait for dialog to appear
+Snapshot()  # Capture new state
+```
+</Tip>
+
+<Tip>
+**Use Shortcuts Over Clicking**
+Shortcuts are often faster and more reliable than clicking menu items:
+```python
+# BETTER: Direct shortcut
+Shortcut("ctrl+s")
+
+# SLOWER: Click through menu
+Click(label=1)  # File menu
+Wait(duration=0.3)
+Click(label=5)  # Save option
+```
+</Tip>
+
+<Tip>
+**Case Insensitive**
+Key names are case-insensitive:
+```python
+Shortcut("CTRL+C")  # Same as
+Shortcut("ctrl+c")  # Same as
+Shortcut("Ctrl+C")  # All work
+```
+</Tip>
+
+<Warning>
+**Application-Specific Shortcuts**
+Some shortcuts only work in specific applications:
+- `ctrl+shift+t` - Browser only (reopen tab)
+- `ctrl+k` - Different meaning in different apps
+- `f2` - Rename in Explorer, Edit in Excel
+
+Verify shortcut behavior for target application.
+</Warning>
+
+<Warning>
+**Focus Requirements**
+Shortcuts are sent to the **active window**:
+- Ensure target window is active before sending shortcut
+- Use `App(mode="switch")` to activate window first
+- Some system shortcuts (Win+L, Ctrl+Shift+Esc) work globally
+</Warning>
+
+## Advanced Usage
+
+### Chain Multiple Shortcuts
+```python
+# Select paragraph and format
+Shortcut("ctrl+shift+down")  # Select paragraph
+Wait(duration=0.2)
+Shortcut("ctrl+b")  # Bold
+Wait(duration=0.1)
+Shortcut("ctrl+i")  # Italic
+```
+
+### Conditional Shortcuts
+```python
+# Different shortcuts based on application
+state = Snapshot()
+if "Chrome" in state.active_window:
+    Shortcut("ctrl+t")  # New tab
+elif "Notepad" in state.active_window:
+    Shortcut("ctrl+n")  # New file
+```
+
+### Navigate Without Mouse
+```python
+# Keyboard-only navigation
+Shortcut("tab")  # Move to next control
+Wait(duration=0.2)
+Shortcut("tab")
+Wait(duration=0.2)
+Shortcut("enter")  # Activate focused control
+```
+
+### Macro-Like Sequences
+```python
+# Complex multi-step operation
+def save_and_export():
+    Shortcut("ctrl+s")  # Save
+    Wait(duration=1)
+    Shortcut("alt+f")  # File menu
+    Wait(duration=0.3)
+    Type(text="e")  # Export option
+    Wait(duration=0.5)
+    Shortcut("enter")  # Confirm
+
+save_and_export()
+```
+
+<Accordion title="Key Name Aliases">
+The following aliases are supported for convenience:
+
+```python
+# Windows key
+"win" = "windows" = "command"
+
+# Alt key
+"alt" = "option"
+
+# Backspace
+"backspace" = "back"
+
+# Caps Lock
+"capslock" = "capital"
+
+# Scroll Lock
+"scrolllock" = "scroll"
+```
+
+All variations work identically.
+</Accordion>
+
+<Accordion title="Special Character Keys">
+For special characters on the keyboard:
+```python
+Shortcut("shift+/")   # Question mark (?)
+Shortcut("shift+1")   # Exclamation (!) 
+Shortcut("shift+2")   # At sign (@)
+Shortcut("ctrl+]")    # Brace
+Shortcut("ctrl+=")    # Equals
+```
+
+Note: Some combinations may vary by keyboard layout.
+</Accordion>
+
+## Related Tools
+
+- [Type](/tools/type) - Enter text instead of shortcuts
+- [Click](/tools/click) - Alternative to menu shortcuts
+- [App](/tools/app) - Switch windows before sending shortcuts
+- [Wait](/tools/wait) - Wait after shortcuts
+- [Snapshot](/tools/snapshot) - Verify shortcut effects
+
+## Implementation Details
+
+From `desktop/service.py:675-686`:
+
+```python
+def shortcut(self, shortcut: str):
+    keys = shortcut.split("+")
+    sendkeys_str = ""
+    for key in keys:
+        key = key.strip()
+        if len(key) == 1:
+            sendkeys_str += key
+        else:
+            name = _KEY_ALIASES.get(key.lower(), key)
+            sendkeys_str += "{" + name + "}"
+    uia.SendKeys(sendkeys_str, interval=0.01)
+```
+
+- Splits shortcut string by `+` separator
+- Applies key aliases (e.g., `win` → `Win`)
+- Single-character keys sent directly
+- Multi-character keys wrapped in braces for UIAutomation
+- 10ms interval between key presses

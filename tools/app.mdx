@@ -1,0 +1,393 @@
+---
+title: App
+description: Launch, resize, and switch between Windows applications
+---
+
+The **App** tool manages Windows applications with three modes: launching applications from the Start menu, resizing and repositioning windows, and switching focus between open windows.
+
+## Purpose & Use Cases
+
+- **Application Launch**: Open programs from Start menu by name
+- **Window Management**: Resize and reposition application windows
+- **Focus Control**: Bring specific windows to the foreground
+- **Workflow Automation**: Open and arrange multiple applications
+- **Desktop Organization**: Position windows for multi-app workflows
+
+## Parameters
+
+<ParamField path="mode" type="string" default="launch">
+  Operation mode:
+  - `"launch"`: Open/start an application
+  - `"resize"`: Adjust window size and position
+  - `"switch"`: Bring a window to focus
+</ParamField>
+
+<ParamField path="name" type="string" optional>
+  Application or window name:
+  - For `launch`: Application name (fuzzy matched against Start menu)
+  - For `resize`: Window title (fuzzy matched, optional - resizes active window if omitted)
+  - For `switch`: Window title (fuzzy matched, required)
+</ParamField>
+
+<ParamField path="window_loc" type="array" optional>
+  Window position `[x, y]` for resize mode. If omitted, keeps current position.
+  
+  Example: `[100, 100]` positions top-left corner at (100, 100)
+</ParamField>
+
+<ParamField path="window_size" type="array" optional>
+  Window dimensions `[width, height]` for resize mode. If omitted, keeps current size.
+  
+  Example: `[800, 600]` resizes to 800px wide by 600px tall
+</ParamField>
+
+## Return Values
+
+### Launch Mode
+```
+"Notepad launched."
+"Launching Chrome sent, but window not detected yet."
+"Calculator not found in start menu."
+```
+
+### Resize Mode
+```
+"Document.docx resized to 1200x800 at 100,100."
+"Notepad is minimized" (error)
+"No active window found" (error when no name provided)
+```
+
+### Switch Mode
+```
+"Switched to Chrome window."
+"Restored Notepad from minimized and switched to it."
+"Application Explorer not found." (error)
+```
+
+## Code Examples
+
+### Launch Applications
+```python
+# Launch common applications
+App(mode="launch", name="notepad")
+Wait(duration=2)
+
+App(mode="launch", name="chrome")
+Wait(duration=3)
+
+App(mode="launch", name="calculator")
+Wait(duration=1)
+```
+
+### Launch with Fuzzy Matching
+```python
+# Partial names work with fuzzy matching
+App(mode="launch", name="word")  # Launches Microsoft Word
+App(mode="launch", name="excel")  # Launches Microsoft Excel
+App(mode="launch", name="code")  # Launches VS Code
+```
+
+### Switch Between Windows
+```python
+# Switch to window by title
+App(mode="switch", name="Chrome")
+Wait(duration=0.5)
+
+# Do work in Chrome
+Snapshot()
+Click(label=10)
+
+# Switch to another window
+App(mode="switch", name="Notepad")
+Wait(duration=0.5)
+```
+
+### Resize Active Window
+```python
+# Resize currently active window
+App(
+    mode="resize",
+    window_size=[1200, 800],
+    window_loc=[100, 100]
+)
+```
+
+### Resize Specific Window
+```python
+# Resize window by name
+App(
+    mode="resize",
+    name="Document.docx",
+    window_size=[1000, 600],
+    window_loc=[200, 150]
+)
+```
+
+### Position Window Only
+```python
+# Move window without resizing
+App(
+    mode="resize",
+    name="Notepad",
+    window_loc=[0, 0]  # Top-left corner
+)
+```
+
+### Resize Window Only
+```python
+# Resize without moving
+App(
+    mode="resize",
+    name="Chrome",
+    window_size=[1920, 1080]
+)
+```
+
+## Common Patterns
+
+### Multi-App Workflow Setup
+```python
+# Launch and arrange multiple applications
+# Launch apps
+App(mode="launch", name="chrome")
+Wait(duration=3)
+App(mode="launch", name="notepad")
+Wait(duration=2)
+App(mode="launch", name="calculator")
+Wait(duration=1)
+
+# Arrange windows
+App(mode="resize", name="Chrome", window_loc=[0, 0], window_size=[960, 1080])
+App(mode="resize", name="Notepad", window_loc=[960, 0], window_size=[960, 540])
+App(mode="resize", name="Calculator", window_loc=[960, 540], window_size=[960, 540])
+```
+
+### Launch and Configure
+```python
+# Launch app and immediately interact
+App(mode="launch", name="notepad")
+Wait(duration=2)
+Snapshot()
+Type(text="Hello World", label=5)
+Shortcut("ctrl+s")  # Save
+```
+
+### Switch and Restore
+```python
+# Switch to minimized window (automatically restores)
+App(mode="switch", name="Calculator")
+Wait(duration=0.5)
+Snapshot(use_vision=True)  # Window is now visible and active
+```
+
+### Side-by-Side Layout
+```python
+# Create side-by-side window layout
+screen_width = 1920
+screen_height = 1080
+half_width = screen_width // 2
+
+# Left window
+App(
+    mode="resize",
+    name="Chrome",
+    window_loc=[0, 0],
+    window_size=[half_width, screen_height]
+)
+
+# Right window
+App(
+    mode="resize",
+    name="Notepad",
+    window_loc=[half_width, 0],
+    window_size=[half_width, screen_height]
+)
+```
+
+### Check if App is Running
+```python
+# Launch only if not already running
+state = Snapshot()
+if "Chrome" not in state:
+    App(mode="launch", name="chrome")
+    Wait(duration=3)
+else:
+    App(mode="switch", name="chrome")
+```
+
+## Best Practices
+
+<Tip>
+**Wait After Launch**
+Different applications have different startup times:
+```python
+# Simple apps
+App(mode="launch", name="notepad")
+Wait(duration=1)
+
+# Complex apps
+App(mode="launch", name="chrome")
+Wait(duration=3)
+
+# Very heavy apps
+App(mode="launch", name="photoshop")
+Wait(duration=10)
+```
+</Tip>
+
+<Tip>
+**Use Fuzzy Names**
+You don't need exact Start menu names:
+```python
+App(mode="launch", name="word")  # Finds "Microsoft Word"
+App(mode="launch", name="calc")  # Finds "Calculator"
+App(mode="launch", name="paint")  # Finds "Paint"
+```
+</Tip>
+
+<Tip>
+**Capture State After Switch**
+Always call Snapshot after switching windows to get updated UI state:
+```python
+App(mode="switch", name="Chrome")
+Wait(duration=0.5)
+Snapshot(use_vision=True)  # Get current Chrome state
+```
+</Tip>
+
+<Warning>
+**Resize Limitations**
+Cannot resize windows that are:
+- Minimized (restore with `switch` mode first)
+- Maximized (use `Shortcut("win+down")` to restore first)
+- Fixed-size (dialogs, some utilities)
+
+```python
+# WRONG: Can't resize maximized window
+App(mode="resize", name="Chrome", window_size=[800, 600])
+# Returns: "Chrome is maximized"
+
+# CORRECT: Restore first
+App(mode="switch", name="Chrome")
+Shortcut("win+down")  # Restore from maximized
+Wait(duration=0.5)
+App(mode="resize", name="Chrome", window_size=[800, 600])
+```
+</Warning>
+
+<Warning>
+**Launch Detection**
+Launch uses smart detection (10 second timeout) to verify the app opened. If the app takes longer:
+```python
+App(mode="launch", name="heavy_app")
+# May return: "Launching Heavy_app sent, but window not detected yet."
+Wait(duration=5)  # Give it more time
+Snapshot()  # Verify window appeared
+```
+</Warning>
+
+## Advanced Usage
+
+### Quadrant Layout
+```python
+# Divide screen into 4 quadrants
+screen_w, screen_h = 1920, 1080
+half_w, half_h = screen_w // 2, screen_h // 2
+
+apps = [
+    ("chrome", [0, 0], [half_w, half_h]),  # Top-left
+    ("notepad", [half_w, 0], [half_w, half_h]),  # Top-right
+    ("calculator", [0, half_h], [half_w, half_h]),  # Bottom-left
+    ("explorer", [half_w, half_h], [half_w, half_h])  # Bottom-right
+]
+
+for name, loc, size in apps:
+    App(mode="launch", name=name)
+    Wait(duration=2)
+    App(mode="resize", name=name, window_loc=loc, window_size=size)
+```
+
+### Restore Window from Minimized
+```python
+# Minimize
+App(mode="switch", name="Notepad")
+Shortcut("win+down")
+Wait(duration=0.5)
+
+# Later, restore and switch
+App(mode="switch", name="Notepad")  # Automatically restores
+Wait(duration=0.5)
+```
+
+### Launch with Arguments
+```python
+# For apps needing command-line arguments, use PowerShell instead
+PowerShell(
+    command='Start-Process "notepad.exe" -ArgumentList "C:\\file.txt"',
+    timeout=10
+)
+```
+
+<Accordion title="Start Menu App Discovery">
+The App tool discovers applications via two methods:
+
+1. **Get-StartApps** (Windows 10/11): Fast PowerShell cmdlet
+2. **Shortcut Scan** (Fallback): Scans Start Menu folders for .lnk files
+
+Fuzzy matching uses 70% similarity threshold:
+```python
+App(mode="launch", name="word")
+# Matches: "Microsoft Word", "Word 2019", "WordPad"
+# Score must be >= 70% similar
+```
+</Accordion>
+
+<Accordion title="Window Position Coordinates">
+Window coordinates use the **virtual desktop** coordinate system:
+- (0, 0) is the top-left of the primary monitor
+- Multi-monitor setups extend the coordinate space
+- Negative coordinates possible with monitors left/above primary
+
+Example multi-monitor (1920x1080 each):
+```
+Monitor 1: (0, 0) to (1920, 1080)
+Monitor 2: (1920, 0) to (3840, 1080)
+```
+</Accordion>
+
+## Related Tools
+
+- [Shortcut](/tools/shortcut) - Window management shortcuts (Win+Left, Win+Right)
+- [Process](/tools/process) - List running applications and kill processes
+- [PowerShell](/tools/shell) - Launch apps with arguments or scripts
+- [Snapshot](/tools/snapshot) - Discover open windows and their titles
+- [Wait](/tools/wait) - Wait for applications to launch
+
+## Implementation Details
+
+From `__main__.py:86-87` and `desktop/service.py:425-467`:
+
+### Launch Detection
+```python
+# Smart wait using UIAutomation (up to 10 seconds)
+if pid > 0:
+    if uia.WindowControl(ProcessId=pid).Exists(maxSearchSeconds=10):
+        launched = True
+
+# Fallback: Regex search for window title
+if not launched:
+    safe_name = re.escape(name)
+    if uia.WindowControl(RegexName=f"(?i).*{safe_name}.*").Exists(maxSearchSeconds=10):
+        launched = True
+```
+
+### Fuzzy Name Matching
+```python
+# 70% similarity threshold for app/window names
+from fuzzywuzzy import process
+matched = process.extractOne(name, available_apps.keys(), score_cutoff=70)
+```
+
+- Tolerant of typos and partial names
+- Case-insensitive
+- Returns best match or None

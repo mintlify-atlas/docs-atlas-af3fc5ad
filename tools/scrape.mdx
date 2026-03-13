@@ -1,0 +1,247 @@
+---
+title: Scrape
+description: Fetch and extract content from web pages with smart LLM processing
+---
+
+The Scrape tool fetches web page content from URLs or active browser tabs. It intelligently processes HTML into clean, readable text, and can optionally use LLM sampling to extract only relevant information.
+
+## Overview
+
+Scrape operates in two modes:
+1. **HTTP Mode** (default): Performs lightweight HTTP GET request and returns processed content
+2. **DOM Mode**: Extracts content from the currently active browser tab's DOM
+
+<Note>
+  By default, Scrape uses LLM sampling to strip boilerplate (ads, navigation, footers) and return only meaningful content. Set `use_sampling=False` for raw output.
+</Note>
+
+## Parameters
+
+<ParamField path="url" type="string" required>
+  The web page URL to fetch.
+  
+  **Example:** `https://example.com/article`
+</ParamField>
+
+<ParamField path="query" type="string">
+  Focus extraction on specific information. Used when `use_sampling=True`.
+  
+  **Example:** `"Extract pricing information"` or `"Find the author's contact details"`
+</ParamField>
+
+<ParamField path="use_dom" type="boolean" default="false">
+  Extract content from the active browser tab instead of making an HTTP request.
+  
+  <Warning>
+    Requires the page to be open in a browser (Chrome, Edge, or Firefox). The browser window must be focused.
+  </Warning>
+</ParamField>
+
+<ParamField path="use_sampling" type="boolean" default="true">
+  Process content through LLM to extract clean, relevant information.
+  
+  Set to `false` for raw HTML-to-Markdown conversion without filtering.
+</ParamField>
+
+## Return Values
+
+Returns a string containing:
+- **URL:** The fetched URL
+- **Content:** Processed page content (clean text, markdown, or structured data)
+
+**DOM Mode extras:**
+- Scroll position indicator (`Reached top` / `Scroll up to see more`)
+- Footer indicator (`Reached bottom` / `Scroll down to see more`)
+
+## Examples
+
+### Basic HTTP Scraping
+
+```python
+# Fetch and auto-clean a web page
+Scrape(
+    url="https://example.com/blog/post"
+)
+# Returns: Clean article text without ads/navigation
+```
+
+### Focused Extraction
+
+```python
+# Extract specific information
+Scrape(
+    url="https://product-site.com/pricing",
+    query="Extract all pricing tiers and features"
+)
+# LLM focuses on pricing information only
+```
+
+### Raw Content
+
+```python
+# Get unprocessed HTML-to-Markdown
+Scrape(
+    url="https://docs.example.com/api",
+    use_sampling=False
+)
+# Returns: Full markdown conversion, no LLM filtering
+```
+
+### DOM Mode (Browser Tab)
+
+```python
+# First, ensure page is loaded and focused
+Snapshot(use_dom=True)
+
+# Then extract visible content from active tab
+Scrape(
+    url="https://interactive-site.com",
+    use_dom=True
+)
+# Extracts content from browser DOM (handles JS-rendered content)
+```
+
+### Scrolling Through Long Pages
+
+```python
+# 1. Open page and take snapshot
+Snapshot(use_dom=True)
+
+# 2. Scrape visible viewport
+Scrape(url="https://long-article.com", use_dom=True)
+# Output: "Scroll down to see more"
+
+# 3. Scroll down
+Scroll(direction="down", wheel_times=5)
+
+# 4. Scrape again
+Scrape(url="https://long-article.com", use_dom=True)
+# Output: "Scroll up to see more" ... content ... "Scroll down to see more"
+```
+
+## Common Patterns
+
+### Research and Documentation
+
+```python
+# Extract specific section from docs
+Scrape(
+    url="https://docs.framework.io/authentication",
+    query="How to implement OAuth 2.0 authentication"
+)
+```
+
+### Price Monitoring
+
+```python
+# Extract pricing from competitor site
+Scrape(
+    url="https://competitor.com/pricing",
+    query="Extract all plan names, prices, and limits"
+)
+```
+
+### Reading Dynamic Content
+
+```python
+# For JavaScript-heavy sites, use DOM mode
+# 1. Open in browser
+App(mode="launch", name="chrome")
+Wait(duration=2)
+
+# 2. Navigate to URL (use Type tool in address bar)
+Click(loc=[400, 50])  # Click address bar
+Type(text="https://spa-app.com")
+Shortcut("enter")
+Wait(duration=3)
+
+# 3. Extract DOM content
+Scrape(url="https://spa-app.com", use_dom=True)
+```
+
+### Archiving Web Pages
+
+```python
+# Get full page content for archival
+result = Scrape(
+    url="https://important-article.com",
+    use_sampling=False
+)
+
+# Save to file
+FileSystem(
+    mode="write",
+    path="archive/article_2024-03-13.md",
+    content=result
+)
+```
+
+## HTTP vs DOM Mode
+
+| Feature | HTTP Mode | DOM Mode |
+|---------|-----------|----------|
+| **Speed** | Fast | Slower |
+| **JavaScript** | Not executed | Fully rendered |
+| **Authentication** | Limited | Uses browser session |
+| **Viewport** | Full page | Visible area only |
+| **Best for** | Public pages, APIs | SPAs, authenticated content |
+
+## Error Handling
+
+**HTTP Mode Errors:**
+```python
+# HTTP error (404, 403, etc.)
+"HTTP error for <url>: 404 Not Found"
+
+# Connection failure
+"Failed to connect to <url>: Connection refused"
+
+# Timeout
+"Request timed out for <url>"
+```
+
+**DOM Mode Errors:**
+```python
+# No browser tab open
+"No DOM information found. Please open <url> in browser first."
+```
+
+## Best Practices
+
+<Tip>
+  **Call Snapshot first** when using DOM mode to ensure the browser tab is detected and focused.
+</Tip>
+
+<Tip>
+  **Use the query parameter** to reduce token usage by extracting only what you need.
+</Tip>
+
+<Tip>
+  **Prefer HTTP mode** when possible—it's faster and doesn't require browser interaction.
+</Tip>
+
+<Warning>
+  **Respect robots.txt** and rate limits when scraping. Some sites may block automated requests.
+</Warning>
+
+## LLM Sampling
+
+When `use_sampling=True` (default), the tool:
+1. Fetches raw HTML/DOM content
+2. Converts to markdown
+3. Sends to LLM with prompt to extract meaningful content
+4. Returns clean, focused text
+
+**System Prompt:**
+> "You are a web content extractor. Given raw webpage content, extract and present only the meaningful information in clean, concise prose or structured format. Strip out navigation menus, cookie banners, ads, footer links, and all other boilerplate."
+
+<Note>
+  Sampling uses up to 2048 tokens per request. For very large pages, consider using DOM mode with manual scrolling.
+</Note>
+
+## Related Tools
+
+- [Snapshot](/tools/snapshot) - Required before using DOM mode
+- [Scroll](/tools/scroll) - Navigate through long pages in DOM mode
+- [FileSystem](/tools/filesystem) - Save scraped content
+- [Clipboard](/tools/clipboard) - Copy extracted content

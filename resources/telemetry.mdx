@@ -1,0 +1,281 @@
+---
+title: Telemetry
+description: What data is collected, how to opt-out, and privacy policy for Windows-MCP
+---
+
+## Overview
+
+Windows-MCP collects anonymous usage data to help improve the MCP server. This telemetry is **enabled by default** but can be easily disabled. We are committed to user privacy and transparency about data collection.
+
+## What Data Is Collected
+
+Windows-MCP uses PostHog analytics to track the following information:
+
+### Tool Execution Metrics
+
+- **Tool name**: Which MCP tool was executed (e.g., `Click`, `Type`, `Shell`)
+- **Execution status**: Whether the tool call succeeded or failed
+- **Execution duration**: How long the tool took to execute (in milliseconds)
+- **Client information**: Name and version of the MCP client (e.g., Claude Desktop, Cursor)
+- **Session ID**: Anonymized session identifier for grouping related tool calls
+- **Mode**: Whether the server is running in `local` or `remote` mode
+
+### Error Tracking
+
+When errors occur, we collect:
+
+- **Error type**: The exception type that was raised
+- **Error message**: The error message (without sensitive details)
+- **Tool context**: Which tool was being executed when the error occurred
+- **Duration**: How long before the error occurred
+
+### User Identification
+
+- **Anonymous User ID**: A randomly generated UUID (universally unique identifier) stored locally in your system's temp directory
+- **No personal information**: We do not collect IP addresses, usernames, or any personally identifiable information
+
+## What Data Is NOT Collected
+
+<Note>
+We take your privacy seriously. The following data is **NEVER** collected:
+</Note>
+
+- **Tool arguments**: Text you type, coordinates you click, file paths, PowerShell commands, etc.
+- **Tool outputs**: Screenshots, command results, scraped web content, clipboard data, etc.
+- **Personal information**: IP addresses, usernames, email addresses, system names, etc.
+- **File contents**: Any files or data you interact with
+- **Browsing history**: Websites you visit or scrape
+
+## How Data Is Used
+
+The collected telemetry data is used exclusively to:
+
+- **Identify common usage patterns**: Understand which tools are most frequently used
+- **Detect reliability issues**: Identify tools with high failure rates
+- **Measure performance**: Track execution times to optimize tool performance
+- **Prioritize development**: Focus on improving tools that users rely on most
+- **Track adoption**: Understand which MCP clients are being used
+
+## How to Opt-Out
+
+You can disable telemetry by setting the `ANONYMIZED_TELEMETRY` environment variable to `false` in your MCP client configuration.
+
+### Claude Desktop
+
+Edit your `claude_desktop_config.json` file:
+
+```json
+{
+  "mcpServers": {
+    "windows-mcp": {
+      "command": "uvx",
+      "args": [
+        "windows-mcp"
+      ],
+      "env": {
+        "ANONYMIZED_TELEMETRY": "false"
+      }
+    }
+  }
+}
+```
+
+### Perplexity Desktop
+
+In Settings → Connectors → Your Windows-MCP connector, edit the JSON configuration:
+
+```json
+{
+  "command": "uvx",
+  "args": [
+    "windows-mcp"
+  ],
+  "env": {
+    "ANONYMIZED_TELEMETRY": "false"
+  }
+}
+```
+
+### Gemini CLI
+
+Edit your `~/.gemini/settings.json` file:
+
+```json
+{
+  "mcpServers": {
+    "windows-mcp": {
+      "command": "uvx",
+      "args": [
+        "windows-mcp"
+      ],
+      "env": {
+        "ANONYMIZED_TELEMETRY": "false"
+      }
+    }
+  }
+}
+```
+
+### Qwen Code
+
+Edit your `~/.qwen/settings.json` file:
+
+```json
+{
+  "mcpServers": {
+    "windows-mcp": {
+      "command": "uvx",
+      "args": [
+        "windows-mcp"
+      ],
+      "env": {
+        "ANONYMIZED_TELEMETRY": "false"
+      }
+    }
+  }
+}
+```
+
+### Codex CLI
+
+Edit your `~/.codex/config.toml` file:
+
+```toml
+[mcp_servers.windows-mcp]
+command = "uvx"
+args = ["windows-mcp"]
+
+[mcp_servers.windows-mcp.env]
+ANONYMIZED_TELEMETRY = "false"
+```
+
+### Command Line (SSE/HTTP Transport)
+
+If running Windows-MCP from the command line with SSE or HTTP transport:
+
+**Windows (PowerShell)**:
+```powershell
+$env:ANONYMIZED_TELEMETRY="false"
+uvx windows-mcp --transport sse --host localhost --port 8000
+```
+
+**Windows (Command Prompt)**:
+```cmd
+set ANONYMIZED_TELEMETRY=false
+uvx windows-mcp --transport sse --host localhost --port 8000
+```
+
+## Telemetry Implementation
+
+Windows-MCP uses the following components for telemetry:
+
+### PostHog Analytics
+
+- **Service**: PostHog (hosted at `https://us.i.posthog.com`)
+- **Data retention**: Per PostHog's privacy policy
+- **GeoIP**: Disabled by default to prevent IP-based location tracking
+- **Exception capture**: Enabled for error tracking
+
+### User ID Persistence
+
+Your anonymous user ID is stored locally in:
+
+```
+%TEMP%\.windows-mcp-user-id
+```
+
+This file contains only a random UUID and is used to group your sessions across restarts. You can delete this file at any time to generate a new anonymous ID.
+
+### Session Tracking
+
+Each time Windows-MCP starts, it creates a unique session ID in the format:
+
+```
+mcp_{timestamp}_{process_id}
+```
+
+This allows us to group tool calls that occur within the same session, without tracking individual users across sessions.
+
+## Console Output
+
+Regardless of telemetry settings, Windows-MCP logs tool execution locally to the console:
+
+```
+[Analytics] Click: SUCCESS (245ms)
+[Analytics] Type: SUCCESS (312ms)
+[Analytics] Shell: FAILED (1023ms)
+```
+
+This local logging helps you monitor what the MCP server is doing and is not sent anywhere.
+
+## Data Processing
+
+All telemetry data is:
+
+- **Processed locally**: Your machine collects and sends data directly to PostHog
+- **Not stored by us**: We do not operate any intermediate servers that store your data
+- **Anonymized**: No personally identifiable information is collected
+- **Aggregated**: We view data in aggregate, not individual sessions
+
+## Privacy Policy
+
+### Data Controller
+
+The Windows-MCP project maintainers (CursorTouch) are the data controllers for telemetry data.
+
+### Third-Party Services
+
+- **PostHog**: Analytics platform. See [PostHog's Privacy Policy](https://posthog.com/privacy)
+- No other third-party services have access to telemetry data
+
+### Data Retention
+
+- Telemetry data is retained according to PostHog's data retention policies
+- We periodically review and may delete older aggregated analytics data
+
+### Your Rights
+
+As telemetry is fully anonymous (using random UUIDs with no personal information):
+
+- You can opt-out at any time by setting `ANONYMIZED_TELEMETRY=false`
+- You can delete your local user ID file to reset your anonymous identifier
+- We cannot identify or delete specific user data as we don't collect personally identifiable information
+
+### Changes to Privacy Policy
+
+We will notify users of any material changes to our data collection practices via:
+
+- GitHub release notes
+- Updates to this documentation
+- Announcements on X ([@CursorTouch](https://x.com/CursorTouch))
+- Discord community notifications
+
+## Transparency
+
+The telemetry implementation is fully open source and available in the Windows-MCP repository:
+
+- **Code location**: `src/windows_mcp/analytics.py`
+- **PostHog client**: `posthog-python` library
+- **Decorator**: `@with_analytics` wraps all MCP tools
+
+You can review the exact implementation to verify what data is collected.
+
+## Questions or Concerns
+
+If you have questions or concerns about telemetry or privacy:
+
+- Open an issue on [GitHub](https://github.com/CursorTouch/Windows-MCP/issues)
+- Email the maintainers at [jeogeoalukka@gmail.com](mailto:jeogeoalukka@gmail.com)
+- Join our [Discord Community](https://discord.com/invite/Aue9Yj2VzS)
+
+## Summary
+
+<Note>
+**Key Takeaways:**
+
+- Telemetry is **enabled by default** but easily disabled
+- We collect **tool names, execution status, and timing** only
+- We **DO NOT** collect tool arguments, outputs, or personal information
+- Set `ANONYMIZED_TELEMETRY=false` to opt-out
+- All data is anonymous and used solely to improve Windows-MCP
+</Note>

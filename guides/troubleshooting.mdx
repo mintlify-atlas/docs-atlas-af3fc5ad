@@ -1,0 +1,628 @@
+---
+title: Troubleshooting Guide
+description: Common issues and solutions for Windows-MCP
+---
+
+This guide covers common issues you may encounter when using Windows-MCP and their solutions.
+
+## Installation Issues
+
+### Server Timeout on First Run
+
+<Warning>
+**Problem**: Windows-MCP times out when first installed or after updating.
+
+**Cause**: The first run requires installing dependencies from `pyproject.toml`, which can take 1-2 minutes.
+</Warning>
+
+**Solution**:
+1. Ignore the timeout error
+2. Restart your MCP client (Claude Desktop, etc.)
+3. The server should start normally on subsequent runs
+
+### UV Not Found or ENOENT Error
+
+**Problem**: Error messages like `spawn ENOENT` or `uv command not found`
+
+**Cause**: The `uv` package manager is not installed or not in PATH
+
+**Solutions**:
+
+<Steps>
+  <Step title="Install UV">
+    <CodeGroup>
+    ```bash pip
+    pip install uv
+    ```
+
+    ```bash Unix/Linux
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Verify installation">
+    ```bash
+    uv --version
+    ```
+  </Step>
+
+  <Step title="Find UV path (Windows)">
+    ```bash
+    where uv
+    ```
+    Common location: `%USERPROFILE%\.local\bin\uv.exe`
+  </Step>
+</Steps>
+
+<Note>
+For Electron-based MCP clients (Claude Desktop MSIX), use the full absolute path to `uv.exe` in your configuration instead of just `uv` or `uvx`.
+</Note>
+
+### Python Version Mismatch
+
+**Problem**: Errors related to Python version compatibility
+
+**Cause**: Windows-MCP requires Python 3.13+
+
+**Solution**:
+1. Check your Python version: `python --version`
+2. Install Python 3.13 or higher from [python.org](https://www.python.org/downloads/)
+3. Ensure the new version is in your PATH
+4. Reinstall Windows-MCP: `uvx windows-mcp`
+
+## Configuration Issues
+
+### Claude Desktop Config File Not Found
+
+**Problem**: Can't locate `claude_desktop_config.json`
+
+**Locations by Installation Type**:
+
+<Tabs>
+  <Tab title="Standard Installation">
+    ```
+    %APPDATA%\Claude\claude_desktop_config.json
+    ```
+    Full path:
+    ```
+    C:\Users\<username>\AppData\Roaming\Claude\claude_desktop_config.json
+    ```
+  </Tab>
+  
+  <Tab title="MSIX (Windows Store)">
+    ```
+    %LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json
+    ```
+    Full path:
+    ```
+    C:\Users\<username>\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+The "Edit Config" button in Claude Desktop MSIX may open the wrong file. Always verify you're editing the correct location.
+</Warning>
+
+### JSON Parsing Errors
+
+**Problem**: "Failed to parse JSON" or similar errors
+
+**Common Causes**:
+
+<AccordionGroup>
+  <Accordion title="BOM (Byte Order Mark) in file">
+    **Issue**: PowerShell's `Set-Content -Encoding UTF8` adds a BOM that breaks JSON parsing.
+
+    **Solution**: Save the file as **UTF-8 without BOM**:
+    - In Notepad: Save As → Encoding: UTF-8 (not UTF-8 with BOM)
+    - In VS Code: Bottom right → Select Encoding → Save with Encoding → UTF-8
+  </Accordion>
+
+  <Accordion title="Invalid JSON syntax">
+    **Issue**: Missing commas, quotes, or brackets
+
+    **Solution**: Validate your JSON at [jsonlint.com](https://jsonlint.com/) before saving.
+  </Accordion>
+
+  <Accordion title="Incorrect path escaping">
+    **Issue**: Backslashes in Windows paths not escaped
+
+    **Wrong**:
+    ```json
+    "C:\Users\Name\Path"
+    ```
+
+    **Correct**:
+    ```json
+    "C:\\Users\\Name\\Path"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Server Not Appearing in Client
+
+**Problem**: Windows-MCP doesn't show up in Claude Desktop or other MCP clients
+
+**Troubleshooting Steps**:
+
+<Steps>
+  <Step title="Verify configuration">
+    - Check the config file is in the correct location
+    - Validate JSON syntax
+    - Ensure the `mcpServers` key is present
+  </Step>
+
+  <Step title="Check logs">
+    For Claude Desktop, check logs at:
+    ```
+    %APPDATA%\Claude\logs\
+    ```
+    Look for error messages related to Windows-MCP.
+  </Step>
+
+  <Step title="Restart the client">
+    Completely close and reopen your MCP client (not just refresh).
+  </Step>
+
+  <Step title="Test UV command manually">
+    Open a terminal and run:
+    ```bash
+    uvx windows-mcp
+    ```
+    This should start the server in stdio mode.
+  </Step>
+</Steps>
+
+## Runtime Issues
+
+### Tools Not Working or Returning Errors
+
+#### Snapshot Returns "No UI Elements Found"
+
+**Problem**: Snapshot tool returns empty interactive elements list
+
+**Possible Causes & Solutions**:
+
+<AccordionGroup>
+  <Accordion title="No applications are open">
+    **Solution**: Ensure at least one application window is open before taking a snapshot.
+  </Accordion>
+
+  <Accordion title="Application not fully loaded">
+    **Solution**: Use the `Wait` tool to give applications time to load:
+    ```json
+    {
+      "tool": "Wait",
+      "arguments": {"duration": 2}
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="WatchDog service not initialized">
+    **Solution**: Restart the MCP server. The WatchDog service may have failed to start.
+  </Accordion>
+
+  <Accordion title="Accessibility tree issues">
+    **Solution**: Some applications don't expose UI elements properly. Try using coordinates instead of labels, or enable vision mode to see the actual UI.
+  </Accordion>
+</AccordionGroup>
+
+#### App Tool Fails to Launch Applications
+
+**Problem**: App tool can't launch or find applications
+
+**Solutions**:
+
+<Steps>
+  <Step title="Verify application name">
+    Use the exact name as it appears in the Start Menu:
+    - ✅ "Notepad"
+    - ❌ "notepad.exe"
+    - ✅ "Calculator"
+    - ❌ "calc"
+  </Step>
+
+  <Step title="Check language settings">
+    <Warning>
+    The App tool is optimized for **English** as the Windows default language. For other languages, application names may not match, or the tool may fail.
+    </Warning>
+
+    **Solution**: Either:
+    - Set Windows display language to English
+    - Use PowerShell tool to launch apps instead:
+      ```json
+      {
+        "tool": "PowerShell",
+        "arguments": {
+          "command": "Start-Process notepad"
+        }
+      }
+      ```
+  </Step>
+
+  <Step title="Use full paths for custom apps">
+    For applications not in the Start Menu:
+    ```json
+    {
+      "tool": "PowerShell",
+      "arguments": {
+        "command": "Start-Process 'C:\\Path\\To\\App.exe'"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+#### Click/Type Tools Say "Element Not Found"
+
+**Problem**: Click or Type tools fail with "Failed to find element with label X"
+
+**Cause**: Element labels from a previous snapshot may be stale
+
+**Solution**:
+1. Take a fresh snapshot before using labels
+2. Verify the label exists in the current snapshot
+3. If the UI changed, the label numbers may have changed too
+
+```json
+// Always snapshot first
+{
+  "tool": "Snapshot",
+  "arguments": {}
+}
+
+// Then use labels from that snapshot
+{
+  "tool": "Click",
+  "arguments": {"label": 42}
+}
+```
+
+#### Type Tool Doesn't Work in IDEs
+
+**Problem**: Typing code in IDEs (VS Code, Visual Studio) produces unexpected results
+
+**Cause**: The Type tool types the entire text as a single operation, which doesn't work well for code with auto-completion and formatting
+
+**Solution**: Use the Type tool for simple text fields only. For code editing:
+- Use keyboard shortcuts (`ctrl+c`, `ctrl+v`) with clipboard
+- Use the FileSystem tool to write code to files
+- Use PowerShell to manipulate files directly
+
+### DOM Mode Issues
+
+#### "No DOM Information Found"
+
+**Problem**: Snapshot with `use_dom=true` returns no DOM information
+
+**Solutions**:
+
+<Steps>
+  <Step title="Verify browser is active">
+    Ensure Chrome, Edge, or Firefox is the active window:
+    ```json
+    {
+      "tool": "App",
+      "arguments": {
+        "mode": "switch",
+        "name": "Google Chrome"
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Check a web page is loaded">
+    DOM mode only works when a web page is loaded (not on new tab pages or settings pages).
+  </Step>
+
+  <Step title="Verify use_ui_tree is enabled">
+    ```json
+    {
+      "tool": "Snapshot",
+      "arguments": {
+        "use_dom": true,
+        "use_ui_tree": true
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Wait for page to load">
+    ```json
+    {
+      "tool": "Wait",
+      "arguments": {"duration": 2}
+    }
+    ```
+  </Step>
+</Steps>
+
+#### Scrape Tool Returns Error
+
+**Problem**: Scrape tool fails or returns empty content
+
+**For HTTP mode (default)**:
+- Check the URL is accessible (not behind authentication)
+- Verify you have internet connectivity
+- Some sites block automated requests; use `use_dom=true` instead
+
+**For DOM mode**:
+- Ensure the page is open in a browser
+- Switch to the browser window first
+- Take a DOM snapshot to verify content is extractable
+
+## Performance Issues
+
+### Slow Response Times
+
+**Problem**: Tool calls take a long time to complete
+
+**Possible Causes & Solutions**:
+
+<AccordionGroup>
+  <Accordion title="Many applications open">
+    **Solution**: Close unnecessary applications. The UI tree traversal slows down with more open windows and elements.
+  </Accordion>
+
+  <Accordion title="Large snapshots with vision">
+    **Solution**: Disable vision when not needed:
+    ```json
+    {
+      "tool": "Snapshot",
+      "arguments": {
+        "use_vision": false
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="High system load">
+    **Solution**: Check CPU and memory usage. Close resource-intensive applications.
+  </Accordion>
+
+  <Accordion title="Remote mode latency">
+    **Solution**: Network latency is expected in remote mode. Consider:
+    - Using a VM in a region closer to you
+    - Minimizing vision-enabled snapshots
+    - Batching operations when possible
+  </Accordion>
+</AccordionGroup>
+
+### Memory Usage High
+
+**Problem**: Windows-MCP consumes excessive memory
+
+**Solutions**:
+1. Restart the MCP server periodically
+2. Avoid taking frequent vision-enabled snapshots
+3. Close unused applications to reduce UI tree size
+4. Check for memory leaks (report to [GitHub Issues](https://github.com/CursorTouch/Windows-MCP/issues))
+
+## Remote Mode Issues
+
+### Authentication Errors
+
+**Problem**: "API_KEY is required" or "SANDBOX_ID is required"
+
+**Solutions**:
+
+<Steps>
+  <Step title="Verify environment variables">
+    Ensure all three variables are set in your config:
+    ```json
+    "env": {
+      "MODE": "remote",
+      "SANDBOX_ID": "your-sandbox-id",
+      "API_KEY": "your-api-key"
+    }
+    ```
+  </Step>
+
+  <Step title="Check credentials">
+    - Verify credentials in the windowsmcp.io dashboard
+    - Ensure the API key hasn't expired
+    - Check that SANDBOX_ID matches an active VM
+  </Step>
+
+  <Step title="Restart the client">
+    Configuration changes require a full restart of your MCP client.
+  </Step>
+</Steps>
+
+### Connection Timeout
+
+**Problem**: "Connection timeout" or "Failed to connect to windowsmcp.io"
+
+**Solutions**:
+- Check your internet connection
+- Verify windowsmcp.io service status
+- Check firewall/proxy settings
+- Try a different network
+- Contact windowsmcp.io support if persistent
+
+### Remote Tools Behaving Differently
+
+**Problem**: Tools work locally but not in remote mode
+
+**Debugging Steps**:
+
+<Steps>
+  <Step title="Take a snapshot">
+    Verify the remote VM state:
+    ```json
+    {
+      "tool": "Snapshot",
+      "arguments": {
+        "use_vision": true
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Check VM is responsive">
+    Test with a simple operation:
+    ```json
+    {
+      "tool": "PowerShell",
+      "arguments": {
+        "command": "Get-Date"
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Verify required software">
+    Ensure the remote VM has necessary applications installed (browsers, applications you're automating).
+  </Step>
+</Steps>
+
+## Security and Permissions Issues
+
+### PowerShell Execution Policy Error
+
+**Problem**: PowerShell commands fail with execution policy errors
+
+**Solution**:
+```json
+{
+  "tool": "PowerShell",
+  "arguments": {
+    "command": "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser"
+  }
+}
+```
+
+<Warning>
+Changing execution policy has security implications. Only do this if you understand the risks.
+</Warning>
+
+### Access Denied Errors
+
+**Problem**: Operations fail with "Access Denied" or permission errors
+
+**Causes & Solutions**:
+
+<AccordionGroup>
+  <Accordion title="Administrator privileges required">
+    Some operations require admin rights. Run your MCP client as Administrator, or use:
+    ```json
+    {
+      "tool": "PowerShell",
+      "arguments": {
+        "command": "Start-Process powershell -Verb RunAs -ArgumentList 'your-command'"
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="File/folder permissions">
+    Check file permissions and ensure the user account has access to the target files or directories.
+  </Accordion>
+
+  <Accordion title="Protected system areas">
+    Avoid modifying protected system files or registry keys without proper permissions.
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices to Avoid Issues
+
+<AccordionGroup>
+  <Accordion title="Always start with a snapshot">
+    Before any automation, take a snapshot to verify the current state and identify element labels.
+  </Accordion>
+
+  <Accordion title="Add appropriate wait times">
+    After launching apps, clicking buttons, or navigating pages, use the `Wait` tool (1-3 seconds) to ensure the UI is ready.
+  </Accordion>
+
+  <Accordion title="Use labels over coordinates">
+    Element labels are more reliable than hardcoded coordinates, especially across different screen sizes or UI states.
+  </Accordion>
+
+  <Accordion title="Handle errors gracefully">
+    Always check tool responses for errors and retry when appropriate. Network and UI state can be transient.
+  </Accordion>
+
+  <Accordion title="Keep UI simple during automation">
+    Close unnecessary windows and applications to reduce UI tree complexity and improve performance.
+  </Accordion>
+
+  <Accordion title="Use vision mode for debugging">
+    When tools aren't working as expected, enable `use_vision=true` to see exactly what the automation is seeing.
+  </Accordion>
+</AccordionGroup>
+
+## Getting Help
+
+If your issue isn't covered here:
+
+<CardGroup cols={2}>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/CursorTouch/Windows-MCP/issues">
+    Report bugs or request features on GitHub
+  </Card>
+  
+  <Card title="Discord Community" icon="discord" href="https://discord.com/invite/Aue9Yj2VzS">
+    Get help from the community on Discord
+  </Card>
+  
+  <Card title="MCP Documentation" icon="book" href="https://modelcontextprotocol.io/quickstart/server">
+    Official MCP troubleshooting resources
+  </Card>
+  
+  <Card title="Security Policy" icon="shield" href="https://github.com/CursorTouch/Windows-MCP/blob/main/SECURITY.md">
+    Report security issues privately
+  </Card>
+</CardGroup>
+
+## Diagnostic Information to Provide
+
+When reporting issues, include:
+
+```markdown
+- **Windows-MCP version**: (check with `uvx windows-mcp --version`)
+- **Windows version**: (e.g., Windows 11 22H2)
+- **Python version**: (run `python --version`)
+- **UV version**: (run `uv --version`)
+- **MCP client**: (Claude Desktop, Perplexity, etc.)
+- **Installation method**: (PyPI via uvx, or from source)
+- **Mode**: (local or remote)
+- **Error message**: (exact error text)
+- **Steps to reproduce**: (what you did before the error)
+- **Configuration**: (sanitized config JSON, remove API keys)
+```
+
+Example:
+
+```
+- Windows-MCP version: 1.2.3
+- Windows version: Windows 11 23H2
+- Python version: 3.13.1
+- UV version: 0.4.2
+- MCP client: Claude Desktop 1.5.0 (Standard)
+- Installation method: PyPI via uvx
+- Mode: local
+- Error message: "Failed to find element with label 42"
+- Steps to reproduce:
+  1. Take snapshot
+  2. Try to click label 42
+  3. Error occurs
+- Configuration: 
+  {
+    "mcpServers": {
+      "windows-mcp": {
+        "command": "uvx",
+        "args": ["windows-mcp"]
+      }
+    }
+  }
+```
+
+## Additional Resources
+
+- [Client Setup Guide](/guides/client-setup) - Initial installation and configuration
+- [Browser Automation Guide](/guides/browser-automation) - DOM mode specifics
+- [Desktop Automation Guide](/guides/desktop-automation) - Desktop interaction patterns
+- [Remote Mode Guide](/guides/remote-mode) - Remote mode setup and troubleshooting
+- [Security Policy](https://github.com/CursorTouch/Windows-MCP/blob/main/SECURITY.md) - Security best practices

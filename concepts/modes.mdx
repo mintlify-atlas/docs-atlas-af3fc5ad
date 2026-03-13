@@ -1,0 +1,603 @@
+---
+title: Local vs Remote Mode
+description: Understanding Windows-MCP deployment modes, transport options, and VM setup
+---
+
+Windows-MCP supports two operating modes: **Local** (default) and **Remote**. This page explains the differences, when to use each, and how to configure them.
+
+## Overview
+
+<CardGroup cols={2}>
+<Card title="Local Mode" icon="computer">
+**Default mode** for personal use. Windows-MCP runs directly on your Windows machine and exposes tools to the connected MCP client.
+
+**Use Case**: Desktop automation, QA testing, personal workflows
+</Card>
+
+<Card title="Remote Mode" icon="cloud">
+**Proxy mode** that connects to [windowsmcp.io](https://windowsmcp.io) for cloud-hosted Windows automation.
+
+**Use Case**: Multi-user deployments, VM-based testing, remote access
+</Card>
+</CardGroup>
+
+## Local Mode
+
+### Default Configuration
+
+No environment variables required. Simply run:
+
+```bash
+# Direct execution
+uvx windows-mcp
+
+# From source
+uv run windows-mcp
+```
+
+Windows-MCP will:
+1. Start FastMCP server on **stdio transport** (default)
+2. Initialize Desktop, Tree, and WatchDog services
+3. Expose 15 tools to the MCP client (Claude Desktop, Cursor, etc.)
+
+### Client Configuration
+
+<Tabs>
+<Tab title="Claude Desktop">
+**Location**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+**PyPI Install** (Recommended):
+```json
+{
+  "mcpServers": {
+    "windows-mcp": {
+      "command": "uvx",
+      "args": ["windows-mcp"]
+    }
+  }
+}
+```
+
+**Source Install**:
+```json
+{
+  "mcpServers": {
+    "windows-mcp": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "C:\\Users\\YourName\\Projects\\Windows-MCP",
+        "run",
+        "windows-mcp"
+      ]
+    }
+  }
+}
+```
+
+<Note>
+**MSIX (Windows Store)** version virtualizes `%APPDATA%`. Config lives at:
+`%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json`
+
+Use **absolute path** to `uv.exe` (Electron apps don't inherit PATH):
+```json
+{
+  "mcpServers": {
+    "windows-mcp": {
+      "command": "C:\\Users\\YourName\\.local\\bin\\uv.exe",
+      "args": ["run", "windows-mcp"]
+    }
+  }
+}
+```
+</Note>
+</Tab>
+
+<Tab title="Cursor">
+**Location**: Settings → Extensions → MCP Servers
+
+Add server:
+```json
+{
+  "command": "uvx",
+  "args": ["windows-mcp"]
+}
+```
+</Tab>
+
+<Tab title="Perplexity Desktop">
+**Location**: Settings → Connectors → Add Connector → Advanced
+
+```json
+{
+  "command": "uvx",
+  "args": ["windows-mcp"]
+}
+```
+</Tab>
+
+<Tab title="Gemini CLI">
+**Location**: `%USERPROFILE%\.gemini\settings.json`
+
+```json
+{
+  "theme": "Default",
+  "mcpServers": {
+    "windows-mcp": {
+      "command": "uvx",
+      "args": ["windows-mcp"]
+    }
+  }
+}
+```
+</Tab>
+</Tabs>
+
+### Network Access (Optional)
+
+For network-accessible server (e.g., testing from another machine):
+
+```bash
+# SSE transport
+uvx windows-mcp --transport sse --host 0.0.0.0 --port 8000
+
+# Streamable HTTP transport (recommended for production)
+uvx windows-mcp --transport streamable-http --host 0.0.0.0 --port 8000
+```
+
+<Accordion title="Transport Comparison">
+| Transport | Protocol | Use Case | Latency | Multi-Client |
+|-----------|----------|----------|---------|---------------|
+| **stdio** | JSON-RPC over stdin/stdout | Direct client connection | Low | No (1:1) |
+| **sse** | Server-Sent Events over HTTP | Browser-friendly, web clients | Medium | Yes |
+| **streamable-http** | HTTP streaming (chunked) | Production, load balancers | Medium | Yes |
+
+**Recommendation**:
+- Development: `stdio` (default)
+- Testing: `sse` (easy CORS handling)
+- Production: `streamable-http` (most reliable)
+</Accordion>
+
+## Remote Mode
+
+### Use Case
+
+Remote mode connects Windows-MCP to [windowsmcp.io](https://windowsmcp.io), which provides:
+- **Managed VMs**: Pre-configured Windows environments
+- **Routing**: Cloud dashboard routes MCP requests to VMs
+- **Multi-User**: Multiple users can access different VMs
+- **Isolation**: Each user gets a dedicated VM instance
+
+**Architecture**:
+```
+MCP Client (Local)  →  windowsmcp.io (Cloud)  →  Windows VM (Remote)
+   (Claude)              (Dashboard/Proxy)           (Windows-MCP)
+```
+
+### Configuration
+
+**Required Environment Variables**:
+- `MODE=remote`
+- `SANDBOX_ID`: Your VM identifier from windowsmcp.io dashboard
+- `API_KEY`: Your authentication key from windowsmcp.io dashboard
+
+<Steps>
+1. **Sign up at [windowsmcp.io](https://windowsmcp.io)**
+   - Create account and provision a VM
+   - Note your `SANDBOX_ID` and `API_KEY`
+
+2. **Configure MCP Client**
+   
+   Add to your MCP client config:
+   
+   ```json
+   {
+     "mcpServers": {
+       "windows-mcp": {
+         "command": "uvx",
+         "args": ["windows-mcp"],
+         "env": {
+           "MODE": "remote",
+           "SANDBOX_ID": "your-sandbox-id",
+           "API_KEY": "your-api-key"
+         }
+       }
+     }
+   }
+   ```
+
+3. **Start VM**
+   - Windows-MCP starts on VM automatically
+   - Connects to windowsmcp.io proxy endpoint
+   - Authenticates with API key
+
+4. **Use Tools**
+   - MCP client calls tools locally
+   - Requests route through windowsmcp.io
+   - Execute on VM, results return to client
+</Steps>
+
+### How It Works
+
+<CodeGroup>
+```python Proxy Initialization
+from fastmcp.server.providers.proxy import ProxyClient
+from fastmcp.client.transports import StreamableHttpTransport
+from windows_mcp.auth import AuthClient
+
+# Authenticate with windowsmcp.io
+client = AuthClient(api_key=config.api_key, sandbox_id=config.sandbox_id)
+client.authenticate()
+
+# Create transport to proxy
+backend = StreamableHttpTransport(
+    url=client.proxy_url,
+    headers=client.proxy_headers
+)
+
+# Create proxy MCP server
+proxy_mcp = FastMCP.as_proxy(ProxyClient(backend), name="windows-mcp")
+
+# Run with desired transport
+proxy_mcp.run(transport="stdio", show_banner=False)
+```
+
+```python Authentication Flow
+class AuthClient:
+    def __init__(self, api_key: str, sandbox_id: str):
+        self.api_key = api_key
+        self.sandbox_id = sandbox_id
+        self.proxy_url = None
+        self.proxy_headers = None
+    
+    def authenticate(self):
+        # Call windowsmcp.io auth endpoint
+        response = requests.post(
+            "https://api.windowsmcp.io/v1/auth",
+            json={
+                "api_key": self.api_key,
+                "sandbox_id": self.sandbox_id
+            }
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            self.proxy_url = data["proxy_url"]
+            self.proxy_headers = {
+                "Authorization": f"Bearer {data['access_token']}",
+                "X-Sandbox-ID": self.sandbox_id
+            }
+        else:
+            raise ValueError(f"Authentication failed: {response.text}")
+```
+</CodeGroup>
+
+### VM Deployment
+
+**Recommended Setup**:
+
+1. **Windows Sandbox** (Windows 10/11 Pro/Enterprise):
+   - Isolated environment
+   - Resets on close
+   - Requires Hyper-V
+   
+   ```powershell
+   # Enable Windows Sandbox
+   Enable-WindowsOptionalFeature -FeatureName Containers-DisposableClientVM -Online
+   ```
+
+2. **Hyper-V VM**:
+   - Persistent storage
+   - Checkpoint support
+   - Full control
+
+3. **Azure/AWS Windows VM**:
+   - Cloud-hosted
+   - Auto-scaling
+   - Network accessible
+
+**Installation on VM**:
+
+```powershell
+# Install Python 3.13+
+winget install Python.Python.3.13
+
+# Install UV
+pip install uv
+
+# Install Windows-MCP
+uvx windows-mcp
+
+# Or from source
+git clone https://github.com/CursorTouch/Windows-MCP.git
+cd Windows-MCP
+uv sync
+```
+
+<Note>
+**Security**: VMs provide isolation, but Windows-MCP still has **full system access**. Do not expose remote endpoints publicly without authentication.
+</Note>
+
+## Transport Options
+
+### stdio (Default)
+
+**Protocol**: JSON-RPC over stdin/stdout
+
+**Use Case**: Direct connection from MCP clients (Claude Desktop, Cursor, etc.)
+
+```bash
+uvx windows-mcp
+# or explicitly
+uvx windows-mcp --transport stdio
+```
+
+**Pros**:
+- Lowest latency (~1ms)
+- Simple configuration
+- Process isolation (one server per client)
+
+**Cons**:
+- Only one client per server process
+- No network access
+- Requires MCP client to manage process lifecycle
+
+### SSE (Server-Sent Events)
+
+**Protocol**: HTTP with server-push for responses
+
+**Use Case**: Browser-based clients, web applications
+
+```bash
+uvx windows-mcp --transport sse --host localhost --port 8000
+```
+
+**Pros**:
+- Multiple clients supported
+- Browser-friendly (uses EventSource API)
+- Simple CORS handling
+
+**Cons**:
+- Higher latency than stdio (~10-50ms)
+- Requires open HTTP port
+- Client must handle reconnections
+
+**Client Connection**:
+```javascript
+const eventSource = new EventSource('http://localhost:8000/sse');
+
+eventSource.onmessage = (event) => {
+  const response = JSON.parse(event.data);
+  console.log('Tool result:', response);
+};
+
+// Send request
+fetch('http://localhost:8000/call', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    tool: 'Click',
+    params: { loc: [100, 200] }
+  })
+});
+```
+
+### Streamable HTTP
+
+**Protocol**: HTTP with chunked transfer encoding
+
+**Use Case**: Production deployments, remote mode, load balancers
+
+```bash
+uvx windows-mcp --transport streamable-http --host 0.0.0.0 --port 8000
+```
+
+**Pros**:
+- Most reliable for production
+- Works behind proxies and load balancers
+- HTTP/2 support
+- Supports request streaming
+
+**Cons**:
+- Slightly more complex than SSE
+- Higher latency than stdio (~10-50ms)
+
+**Recommended for**:
+- Remote mode (windowsmcp.io)
+- Kubernetes deployments
+- Multi-tenant setups
+
+## Mode Selection Logic
+
+<CodeGroup>
+```python Entry Point
+@click.command()
+@click.option(
+    "--transport",
+    type=click.Choice(["stdio", "sse", "streamable-http"]),
+    default="stdio"
+)
+@click.option("--host", default="localhost", type=str)
+@click.option("--port", default=8000, type=int)
+def main(transport, host, port):
+    config = Config(
+        mode=os.getenv("MODE", "local").lower(),
+        sandbox_id=os.getenv("SANDBOX_ID", ''),
+        api_key=os.getenv("API_KEY", '')
+    )
+    
+    match config.mode:
+        case "local":
+            # Run MCP server directly
+            match transport:
+                case "stdio":
+                    mcp.run(transport="stdio", show_banner=False)
+                case "sse" | "streamable-http":
+                    mcp.run(
+                        transport=transport,
+                        host=host,
+                        port=port,
+                        show_banner=False
+                    )
+        
+        case "remote":
+            # Validate environment variables
+            if not config.sandbox_id:
+                raise ValueError("SANDBOX_ID is required for MODE: remote")
+            if not config.api_key:
+                raise ValueError("API_KEY is required for MODE: remote")
+            
+            # Authenticate and create proxy
+            client = AuthClient(api_key=config.api_key, sandbox_id=config.sandbox_id)
+            client.authenticate()
+            
+            backend = StreamableHttpTransport(
+                url=client.proxy_url,
+                headers=client.proxy_headers
+            )
+            
+            proxy_mcp = FastMCP.as_proxy(ProxyClient(backend), name="windows-mcp")
+            
+            # Run proxy with desired transport
+            match transport:
+                case "stdio":
+                    proxy_mcp.run(transport="stdio", show_banner=False)
+                case "sse" | "streamable-http":
+                    proxy_mcp.run(
+                        transport=transport,
+                        host=host,
+                        port=port,
+                        show_banner=False
+                    )
+```
+
+```python Config Model
+from dataclasses import dataclass, field
+
+@dataclass
+class Config:
+    mode: str                      # "local" or "remote"
+    sandbox_id: str = field(default='')  # Required for remote mode
+    api_key: str = field(default='')     # Required for remote mode
+```
+</CodeGroup>
+
+## Environment Variables
+
+### All Modes
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ANONYMIZED_TELEMETRY` | `true` | Enable PostHog telemetry (set to `false` to disable) |
+
+### Remote Mode Only
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `MODE` | ✅ | Set to `remote` |
+| `SANDBOX_ID` | ✅ | VM identifier from windowsmcp.io |
+| `API_KEY` | ✅ | Authentication key from windowsmcp.io |
+
+## Comparison
+
+| Feature | Local Mode | Remote Mode |
+|---------|------------|-------------|
+| **Installation** | Direct on your machine | VM via windowsmcp.io |
+| **Network Access** | Optional (stdio default) | Required (proxy) |
+| **Multi-User** | No | Yes |
+| **Isolation** | Process-level | VM-level |
+| **Latency** | Low (~1ms stdio) | Medium (~50-200ms) |
+| **Setup Complexity** | Simple | Moderate |
+| **Use Case** | Personal automation | Team testing, demos |
+
+## Security Considerations
+
+<Warning>
+**Full System Access**: Windows-MCP has unrestricted access to the Windows OS. Tools like `Shell` and `App` can execute arbitrary commands.
+</Warning>
+
+**Recommendations**:
+
+1. **Local Mode**:
+   - ✅ Safe for personal use
+   - ⚠️ Do not expose network endpoints publicly
+   - ⚠️ Review tool calls before execution
+
+2. **Remote Mode**:
+   - ✅ Use dedicated VMs
+   - ✅ Implement access controls (API keys)
+   - ✅ Monitor tool execution logs
+   - ✅ Use Windows Sandbox for ephemeral sessions
+   - ❌ Never expose publicly without authentication
+
+3. **Network Transports**:
+   - ✅ Use `localhost` for testing
+   - ✅ Use firewall rules to restrict access
+   - ✅ Consider HTTPS/TLS for production
+   - ❌ Never bind to `0.0.0.0` on production without auth
+
+See [Security Policy](https://github.com/CursorTouch/Windows-MCP/blob/main/SECURITY.md) for full guidelines.
+
+## Troubleshooting
+
+<Accordion title="stdio timeout in Claude Desktop">
+**Symptom**: Claude Desktop shows "Tool not available" or connection timeout.
+
+**Causes**:
+1. First run takes 1-2 minutes to install dependencies
+2. Windows Defender/antivirus blocking execution
+3. Wrong Python version (requires 3.13+)
+
+**Solutions**:
+- Wait 2 minutes, then restart Claude Desktop
+- Add exclusion for `uv.exe` in Windows Defender
+- Verify Python version: `python --version`
+</Accordion>
+
+<Accordion title="Remote mode authentication failed">
+**Symptom**: `Authentication failed: 401 Unauthorized`
+
+**Causes**:
+1. Invalid API key
+2. Expired sandbox
+3. Network connectivity issues
+
+**Solutions**:
+- Verify `API_KEY` and `SANDBOX_ID` in dashboard
+- Check VM is running (windowsmcp.io dashboard)
+- Test network: `curl https://api.windowsmcp.io/health`
+</Accordion>
+
+<Accordion title="Network transport not accessible">
+**Symptom**: Cannot connect to `http://localhost:8000`
+
+**Causes**:
+1. Port already in use
+2. Firewall blocking port
+3. Server crashed
+
+**Solutions**:
+- Check port: `netstat -an | findstr 8000`
+- Add firewall rule: `netsh advfirewall firewall add rule name="Windows-MCP" dir=in action=allow protocol=TCP localport=8000`
+- Check logs for errors
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="Tools Overview" icon="wrench" href="/tools/overview">
+Explore all 15 available tools
+</Card>
+
+<Card title="Examples" icon="code" href="/quickstart">
+See Windows-MCP in action
+</Card>
+
+<Card title="windowsmcp.io" icon="cloud" href="https://windowsmcp.io">
+Sign up for remote VMs
+</Card>
+
+<Card title="Security Policy" icon="shield" href="https://github.com/CursorTouch/Windows-MCP/blob/main/SECURITY.md">
+Deployment security guidelines
+</Card>
+</CardGroup>

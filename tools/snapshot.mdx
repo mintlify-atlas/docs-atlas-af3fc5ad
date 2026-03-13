@@ -1,0 +1,265 @@
+---
+title: Snapshot
+description: Capture complete desktop state including windows, UI elements, and screenshots
+---
+
+The **Snapshot** tool captures the complete state of the Windows desktop, including active windows, interactive UI elements with coordinates, scrollable areas, and optional screenshots. This is the foundational tool for all UI automation tasks.
+
+<Note>
+**Always call Snapshot first** before using other interaction tools like Click, Type, or Scroll. It provides the current UI state and element labels needed for automation.
+</Note>
+
+## Purpose & Use Cases
+
+- **UI Discovery**: Identify interactive elements (buttons, text fields, links) with their coordinates
+- **Visual Context**: Capture screenshots with annotated bounding boxes
+- **Browser Automation**: Extract web page DOM content for scraping
+- **Multi-Monitor Support**: Capture specific displays or entire virtual desktop
+- **State Validation**: Verify UI state before taking actions
+
+## Parameters
+
+<ParamField path="use_vision" type="boolean" default="false">
+  Include a screenshot in the response. Set to `true` to get visual feedback with cursor highlighting.
+</ParamField>
+
+<ParamField path="use_dom" type="boolean" default="false">
+  Extract web page DOM content when the active window is a browser (Chrome, Edge, Firefox). Requires `use_ui_tree=true`.
+</ParamField>
+
+<ParamField path="use_annotation" type="boolean" default="true">
+  Draw colored bounding boxes around detected UI elements in the screenshot. Set to `false` for clean screenshots.
+  Only applies when `use_vision=true`.
+</ParamField>
+
+<ParamField path="use_ui_tree" type="boolean" default="true">
+  Extract interactive and scrollable UI elements using Windows UIAutomation. Set to `false` for faster screenshot-only snapshots.
+</ParamField>
+
+<ParamField path="width_reference_line" type="integer" optional>
+  Number of vertical grid lines to overlay on the screenshot for spatial reasoning. Requires `use_vision=true`.
+</ParamField>
+
+<ParamField path="height_reference_line" type="integer" optional>
+  Number of horizontal grid lines to overlay on the screenshot. Requires `use_vision=true`.
+</ParamField>
+
+<ParamField path="display" type="array" optional>
+  Array of display indices to capture (e.g., `[0]` or `[0, 1]`). Omit to capture the entire virtual desktop.
+  Display indices start at 0 for the primary monitor.
+</ParamField>
+
+## Return Values
+
+Returns a structured text report containing:
+
+### Metadata
+- **Cursor Position**: Current mouse coordinates `(x, y)`
+- **Screenshot Resolution**: Image dimensions if `use_vision=true`
+- **Screenshot Region**: Captured area bounds
+- **Displays**: List of captured display indices
+- **Coordinate Space**: "Virtual desktop coordinates"
+
+### Active Desktop
+- Current virtual desktop ID and name (Windows 10/11 feature)
+
+### All Desktops
+- List of all virtual desktops
+
+### Focused Window
+- Name, process ID, status (normal/maximized/minimized), bounding box
+
+### Opened Windows
+- All visible windows with their properties
+
+### Interactive Elements
+- Labeled list of clickable/typeable UI elements:
+  - Label ID (for use with other tools)
+  - Control type (Button, TextBox, Link, etc.)
+  - Name/text content
+  - Coordinates `(x, y)`
+  - Window name
+
+### Scrollable Elements
+- Labeled list of scrollable areas with coordinates
+
+### Screenshot (if use_vision=true)
+- PNG image with:
+  - Colored bounding boxes around elements (if `use_annotation=true`)
+  - Numeric labels in top-right of each box
+  - Red circular cursor highlight
+  - Optional grid lines for spatial reference
+
+## Code Examples
+
+### Basic Desktop Capture
+```python
+# Capture desktop state without screenshot (fastest)
+state = Snapshot()
+print(state)  # Shows windows and interactive elements
+```
+
+### Visual Snapshot with Annotations
+```python
+# Capture with annotated screenshot
+state = Snapshot(
+    use_vision=True,
+    use_annotation=True
+)
+# Returns text report + PNG image with labeled UI elements
+```
+
+### Clean Screenshot (No Annotations)
+```python
+# Get clean screenshot for visual inspection
+state = Snapshot(
+    use_vision=True,
+    use_annotation=False
+)
+```
+
+### Browser DOM Extraction
+```python
+# Extract web page content from active browser tab
+state = Snapshot(
+    use_dom=True,
+    use_ui_tree=True
+)
+# Returns page text content instead of browser UI elements
+```
+
+### Multi-Monitor Capture
+```python
+# Capture only the primary monitor (display 0)
+state = Snapshot(
+    use_vision=True,
+    display=[0]
+)
+
+# Capture displays 0 and 1
+state = Snapshot(
+    use_vision=True,
+    display=[0, 1]
+)
+```
+
+### Grid Reference for Spatial Reasoning
+```python
+# Add 5x5 grid overlay to help with coordinate planning
+state = Snapshot(
+    use_vision=True,
+    width_reference_line=5,
+    height_reference_line=5
+)
+```
+
+## Common Patterns
+
+### Before Every Interaction
+```python
+# 1. Capture current state
+state = Snapshot(use_vision=True)
+
+# 2. Identify element label from output (e.g., label 15 is "Submit" button)
+
+# 3. Interact using the label
+Click(label=15)
+```
+
+### Validating UI State
+```python
+# Check if expected window/element is present
+state = Snapshot()
+if "Login" in state:
+    Type(text="username", label=5)
+    Type(text="password", label=6)
+    Click(label=7)  # Submit button
+```
+
+### Web Scraping Workflow
+```python
+# 1. Open browser and navigate to page
+App(mode="launch", name="chrome")
+Wait(duration=2)
+Shortcut("ctrl+l")  # Focus address bar
+Type(text="https://example.com", press_enter=True)
+Wait(duration=3)
+
+# 2. Extract page content
+state = Snapshot(use_dom=True)
+print(state)  # Contains page text
+
+# 3. Scroll and extract more
+Scroll(direction="down", wheel_times=5)
+Wait(duration=1)
+state = Snapshot(use_dom=True)
+```
+
+## Best Practices
+
+<Tip>
+**Performance Optimization**
+- Use `use_vision=false` when you only need element coordinates (3-5x faster)
+- Use `use_ui_tree=false` for quick screenshots without element extraction
+- Limit `display` parameter to specific monitors when working in multi-monitor setups
+</Tip>
+
+<Tip>
+**Label Management**
+- Interactive element labels start at 0 and increment sequentially
+- Scrollable element labels start after the last interactive element
+- Labels are only valid for the current snapshot session
+- Re-run Snapshot after UI changes to refresh labels
+</Tip>
+
+<Warning>
+**DOM Extraction Requirements**
+- `use_dom=true` requires `use_ui_tree=true` (enforced)
+- Only works when active window is a supported browser (Chrome, Edge, Firefox)
+- DOM content shows viewport-visible text only (scroll to see more)
+- Returns error if no browser is active
+</Warning>
+
+## Performance Notes
+
+- **Fast mode** (`use_ui_tree=false`, `use_vision=false`): ~0.1-0.2 seconds
+- **Standard mode** (UI tree only): ~0.5-1.5 seconds
+- **Full mode** (UI tree + vision): ~0.8-2.5 seconds
+- **DOM mode**: Add ~0.5-1 second for browser content extraction
+
+Performance varies based on:
+- Number of open windows
+- Complexity of active application UI
+- Number of monitors
+- Screenshot resolution
+
+## Related Tools
+
+- [Click](/tools/click) - Click on elements using labels from Snapshot
+- [Type](/tools/type) - Type text into fields using labels
+- [Scroll](/tools/scroll) - Scroll in areas identified by Snapshot
+- [Move](/tools/move) - Move cursor to element coordinates
+- [Scrape](/tools/scrape) - Alternative web scraping with HTTP requests
+
+## Troubleshooting
+
+<Accordion title="No interactive elements found">
+  This usually means:
+  - The active window is minimized or hidden
+  - The application doesn't expose UI elements via UIAutomation (e.g., some games)
+  - Try using `use_vision=true` for visual inspection
+  - Consider using coordinate-based interaction instead of labels
+</Accordion>
+
+<Accordion title="Screenshot is blank or black">
+  - Some applications block screen capture (DRM, games, UAC prompts)
+  - Try capturing a specific display instead of all monitors
+  - Check if the window is actually visible and not minimized
+</Accordion>
+
+<Accordion title="DOM extraction returns error">
+  - Ensure a browser is the active window
+  - Navigate to the target page before calling Snapshot
+  - Check that `use_ui_tree=true` is set
+  - Supported browsers: Chrome, Edge, Firefox
+</Accordion>

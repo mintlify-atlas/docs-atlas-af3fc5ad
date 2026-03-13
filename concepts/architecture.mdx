@@ -1,0 +1,531 @@
+---
+title: System Architecture
+description: Understanding Windows-MCP's layered service architecture and component interactions
+---
+
+Windows-MCP follows a **layered service architecture** that cleanly separates concerns between MCP protocol handling, desktop orchestration, UI element discovery, and low-level Windows automation.
+
+## High-Level Overview
+
+```
+┌─────────────────────────────────────────────────────────┐
+│              MCP Tools (15 tools)                       │
+│  Click, Type, Scroll, App, Snapshot, Shell, etc.       │
+└────────────────┬────────────────────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────────────────────┐
+│                 __main__.py                             │
+│  - FastMCP server instance                              │
+│  - Tool registration & routing                          │
+│  - Analytics wrapper (@with_analytics)                  │
+│  - Lifespan management (async context)                  │
+└────────────────┬────────────────────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────────────────────┐
+│              Desktop Service                            │
+│  - High-level orchestrator                              │
+│  - Window management (launch, resize, switch)           │
+│  - Screenshots & cursor tracking                        │
+│  - Mouse/keyboard actions                               │
+│  - Clipboard & process management                       │
+└────────────────┬────────────────────────────────────────┘
+                 │
+          ┌──────┴──────┐
+          ▼             ▼
+    ┌──────────┐   ┌──────────┐
+    │   Tree   │   │ WatchDog │
+    │ Service  │   │ Service  │
+    └─────┬────┘   └────┬─────┘
+          │             │
+          └──────┬──────┘
+                 ▼
+┌─────────────────────────────────────────────────────────┐
+│           UIAutomation Wrapper (uia/)                   │
+│  - Windows COM API abstraction                          │
+│  - Control hierarchy traversal                          │
+│  - Pattern interfaces (Invoke, Value, etc.)             │
+│  - Event subscriptions                                  │
+└─────────────────────────────────────────────────────────┘
+                 │
+                 ▼
+     Windows UIAutomation COM API
+```
+
+## Core Components
+
+### Entry Point: `__main__.py`
+
+**Location**: `src/windows_mcp/__main__.py`
+
+The entry point registers all 15 MCP tools on a FastMCP server instance and manages the application lifecycle.
+
+<CodeGroup>
+```python Lifespan Management
+@asynccontextmanager
+async def lifespan(app: FastMCP):
+    global desktop, watchdog, analytics, screen_size
+    
+    # Initialize components
+    if os.getenv("ANONYMIZED_TELEMETRY", "true").lower() != "false":
+        analytics = PostHogAnalytics()
+    desktop = Desktop()
+    watchdog = WatchDog()
+    screen_size = desktop.get_screen_size()
+    watchdog.set_focus_callback(desktop.tree.on_focus_change)
+    
+    try:
+        watchdog.start()
+        await asyncio.sleep(1)
+        yield
+    finally:
+        if watchdog:
+            watchdog.stop()
+        if analytics:
+            await analytics.close()
+```
+
+```python Tool Registration
+@mcp.tool(
+    name="Click",
+    description="Performs mouse clicks at specified coordinates...",
+    annotations=ToolAnnotations(
+        title="Click",
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
+)
+@with_analytics(analytics, "Click-Tool")
+def click_tool(
+    loc: list[int] | None = None,
+    label: int | None = None,
+    button: Literal["left", "right", "middle"] = "left",
+    clicks: int = 1,
+    ctx: Context = None,
+) -> str:
+    if label is not None:
+        loc = list(desktop.get_coordinates_from_label(label))
+    desktop.click(loc=loc, button=button, clicks=clicks)
+    return f"Clicked at ({loc[0]},{loc[1]})"
+```
+</CodeGroup>
+
+<Note>
+Each tool function delegates to Desktop service methods. The `@with_analytics` decorator wraps tools for optional telemetry (disabled via `ANONYMIZED_TELEMETRY=false`).
+</Note>
+
+### Desktop Service
+
+**Location**: `src/windows_mcp/desktop/service.py`
+
+The Desktop service is the **high-level orchestrator** that manages all desktop interactions.
+
+**Responsibilities**:
+- Window operations: launch applications, resize/move windows, switch focus
+- Screenshot capture with annotation (labels, bounding boxes, cursor highlight)
+- Mouse actions: click, drag, move, scroll
+- Keyboard actions: type text, send shortcuts
+- Clipboard operations
+- Process management
+- Interfacing with Tree service for UI element discovery
+
+<CodeGroup>
+```python Window Management
+def launch_app(self, name: str) -> tuple[str, int, int]:
+    apps_map = self.get_apps_from_start_menu()
+    matched_app = process.extractOne(name, apps_map.keys(), score_cutoff=70)
+    if matched_app is None:
+        return (f"{name.title()} not found in start menu.", 1, 0)
+    
+    app_name, _ = matched_app
+    appid = apps_map.get(app_name)
+    
+    pid = 0
+    if os.path.exists(appid) or "\\" in appid:
+        safe = ps_quote(appid)
+        command = f"Start-Process {safe} -PassThru | Select-Object -ExpandProperty Id"
+        response, status = self.execute_command(command)
+        if status == 0 and response.strip().isdigit():
+            pid = int(response.strip())
+    else:
+        safe = ps_quote(f"shell:AppsFolder\\{appid}")
+        command = f"Start-Process {safe}"
+        response, status = self.execute_command(command)
+    
+    return response, status, pid
+```
+
+```python State Capture
+def get_state(
+    self,
+    use_annotation: bool = True,
+    use_vision: bool = False,
+    use_dom: bool = False,
+    use_ui_tree: bool = True,
+    display_indices: list[int] | None = None,
+    max_image_size: Size | None = None,
+) -> DesktopState:
+    # Get window hierarchy
+    controls_handles = self.get_controls_handles()
+    windows, windows_handles = self.get_windows(controls_handles)
+    active_window = self.get_active_window(windows)
+    
+    # Get cursor position
+    cursor_position = self.get_cursor_location()
+    
+    # Capture UI tree
+    if use_ui_tree:
+        tree_state = self.tree.get_state(
+            active_window.handle if active_window else None,
+            other_windows_handles,
+            use_dom=use_dom
+        )
+    
+    # Capture screenshot with annotations
+    if use_vision:
+        screenshot = self.get_annotated_screenshot(
+            nodes=tree_state.interactive_nodes,
+            cursor_pos=cursor_position,
+        )
+    
+    return DesktopState(
+        active_window=active_window,
+        windows=windows,
+        screenshot=screenshot,
+        cursor_position=cursor_position,
+        tree_state=tree_state,
+    )
+```
+</CodeGroup>
+
+**Data Models** (`desktop/views.py`):
+- `DesktopState`: Complete snapshot of desktop state
+- `Window`: Window metadata (name, status, bounding box, handle)
+- `Size`: Width/height dimensions
+- `BoundingBox`: Rectangle coordinates (left, top, right, bottom)
+- `Status`: Window state enum (NORMAL, MINIMIZED, MAXIMIZED, HIDDEN)
+
+### Tree Service
+
+**Location**: `src/windows_mcp/tree/service.py`
+
+The Tree service **captures the Windows accessibility tree** from active and background windows to identify interactive and scrollable UI elements.
+
+**Key Features**:
+- Multi-threaded UI traversal using sequential processing (avoids COM apartment threading issues)
+- Retry logic for reliability (`THREAD_MAX_RETRIES=3`)
+- Browser detection with special DOM extraction mode
+- IOU (Intersection over Union) clipping for elements within visible bounds
+
+<CodeGroup>
+```python Tree Traversal
+def tree_traversal(
+    self, 
+    node: Control,
+    window_bounding_box: Rect,
+    window_name: str,
+    is_browser: bool,
+    interactive_nodes: list[TreeElementNode],
+    scrollable_nodes: list[ScrollElementNode],
+    dom_interactive_nodes: list[TreeElementNode],
+    dom_informative_nodes: list[TextElementNode],
+    is_dom: bool = False,
+    element_cache_req = None,
+    children_cache_req = None,
+):
+    # Check visibility
+    is_offscreen = node.CachedIsOffscreen
+    element_bounding_box = node.CachedBoundingRectangle
+    area = element_bounding_box.width() * element_bounding_box.height()
+    is_visible = (area > 0) and not is_offscreen
+    
+    if is_visible and node.CachedIsEnabled:
+        control_type_name = node.CachedControlTypeName
+        
+        # Check if interactive
+        if control_type_name in INTERACTIVE_CONTROL_TYPE_NAMES:
+            metadata = {
+                'has_focused': node.CachedHasKeyboardFocus,
+            }
+            
+            if isinstance(node, EditControl):
+                value = node.GetCachedPropertyValue(PropertyId.LegacyIAccessibleValueProperty)
+                metadata['value'] = value.strip() if value else '(empty)'
+            
+            bounding_box = self.iou_bounding_box(window_bounding_box, element_bounding_box)
+            interactive_nodes.append(TreeElementNode(
+                name=node.CachedName.strip(),
+                control_type=node.CachedLocalizedControlType,
+                bounding_box=bounding_box,
+                center=bounding_box.get_center(),
+                window_name=window_name,
+                metadata=metadata
+            ))
+    
+    # Recursively traverse children
+    children = CachedControlHelper.get_cached_children(node, children_cache_req)
+    for child in (children if is_dom else reversed(children)):
+        self.tree_traversal(child, window_bounding_box, window_name, is_browser, ...)
+```
+
+```python Caching Strategy
+# Create cache requests for efficient traversal
+element_cache_req = CacheRequestFactory.create_tree_traversal_cache()
+element_cache_req.TreeScope = TreeScope.TreeScope_Element
+
+children_cache_req = CacheRequestFactory.create_tree_traversal_cache()
+children_cache_req.TreeScope = TreeScope.TreeScope_Element | TreeScope.TreeScope_Children
+
+# Build cached control
+node = CachedControlHelper.build_cached_control(node, element_cache_req)
+
+# Access cached properties (no COM round-trip)
+name = node.CachedName
+control_type = node.CachedControlTypeName
+is_enabled = node.CachedIsEnabled
+```
+</CodeGroup>
+
+**Data Models** (`tree/views.py`):
+- `TreeState`: Root node, interactive nodes, scrollable nodes, DOM nodes
+- `TreeElementNode`: UI element with name, type, bounding box, metadata
+- `ScrollElementNode`: Scrollable element with scroll percentages
+- `TextElementNode`: Text content (for DOM extraction)
+
+<Info>
+The Tree service uses **cached properties** extensively to minimize COM round-trips during traversal. This improves performance by ~10x compared to live property access.
+</Info>
+
+### UIAutomation Wrapper
+
+**Location**: `src/windows_mcp/uia/`
+
+A low-level Python abstraction over the Windows UIAutomation COM API via `comtypes`.
+
+**Module Structure**:
+- `core.py`: Main automation object wrapper, coordinate system functions
+- `controls.py`: Control hierarchy (WindowControl, ButtonControl, EditControl, etc.)
+- `patterns.py`: UIAutomation patterns (InvokePattern, ValuePattern, ScrollPattern, etc.)
+- `enums.py`: COM enumerations (ControlType, PatternId, PropertyId, etc.)
+- `events.py`: Event subscription handlers
+
+<CodeGroup>
+```python Control Hierarchy
+class Control:
+    """Base control wrapper for IUIAutomationElement"""
+    
+    @property
+    def BoundingRectangle(self) -> Rect:
+        """Physical pixel coordinates (DPI-aware)"""
+        rect = self.Element.CurrentBoundingRectangle
+        return Rect(rect.left, rect.top, rect.right, rect.bottom)
+    
+    def GetFirstChildControl(self) -> Control | None:
+        """Navigate to first child in UI tree"""
+        ele = _AutomationClient.instance().ViewWalker.GetFirstChildElement(self.Element)
+        return Control.CreateControlFromElement(ele)
+    
+    def GetPattern(self, patternId: int):
+        """Get pattern interface if supported"""
+        pattern = self.Element.GetCurrentPattern(patternId)
+        if pattern:
+            return CreatePattern(patternId, pattern)
+
+# Specialized control types
+class ButtonControl(Control):
+    pass
+
+class EditControl(Control):
+    pass
+
+class WindowControl(Control):
+    pass
+```
+
+```python Mouse & Keyboard
+def Click(x: int, y: int, waitTime: float = OPERATION_WAIT_TIME) -> None:
+    """Simulate mouse click at physical coordinates"""
+    SetCursorPos(x, y)
+    screenWidth, screenHeight = GetScreenSize()
+    mouse_event(
+        MouseEventFlag.LeftDown | MouseEventFlag.Absolute,
+        x * 65535 // screenWidth,
+        y * 65535 // screenHeight,
+        0, 0,
+    )
+    time.sleep(0.05)
+    mouse_event(
+        MouseEventFlag.LeftUp | MouseEventFlag.Absolute,
+        x * 65535 // screenWidth,
+        y * 65535 // screenHeight,
+        0, 0,
+    )
+    time.sleep(waitTime)
+
+def SendKeys(text: str, interval: float = 0.01, charMode: bool = True) -> None:
+    """Simulate keyboard input
+    
+    Examples:
+        SendKeys('{Ctrl}a{Delete}{Ctrl}v')  # Ctrl+a, Delete, Ctrl+v
+        SendKeys('{Ctrl}(AB)')              # Ctrl+A+B
+        SendKeys('Hello{Enter}')            # Type Hello, press Enter
+    """
+    # Parse keys and send events...
+```
+</CodeGroup>
+
+<Note>
+**Coordinate System**: UIAutomation uses **physical pixel coordinates** (DPI-aware). Windows-MCP calls `SetProcessDpiAwareness(PerMonitorDpiAware)` at module load to ensure BoundingRectangle coordinates match mouse click coordinates exactly, even on scaled displays.
+</Note>
+
+### WatchDog Service
+
+**Location**: `src/windows_mcp/watchdog/service.py`
+
+The WatchDog runs in a **separate STA thread** monitoring UI focus changes via UIAutomation events.
+
+**Purpose**: Notify the Tree service of focus changes so the accessibility tree stays current without polling.
+
+<CodeGroup>
+```python WatchDog Thread
+class WatchDog:
+    def __init__(self):
+        self.uia = _AutomationClient.instance().IUIAutomation
+        self.is_running = Event()
+        self.thread = None
+        self._focus_callback = None
+        self._focus_handler = None
+    
+    def start(self):
+        if self.is_running.is_set():
+            return
+        self.is_running.set()
+        self.thread = Thread(target=self._run, name="WatchDogThread")
+        self.thread.daemon = True
+        self.thread.start()
+    
+    def _run(self):
+        """Main event loop in dedicated STA thread"""
+        comtypes.CoInitialize()
+        try:
+            while self.is_running.is_set():
+                if self._focus_callback and not self._focus_handler:
+                    self._focus_handler = FocusChangedEventHandler(self)
+                    self.uia.AddFocusChangedEventHandler(None, self._focus_handler)
+                
+                # Pump COM events
+                comtypes.client.PumpEvents(0.1)
+        finally:
+            if self._focus_handler:
+                self.uia.RemoveFocusChangedEventHandler(self._focus_handler)
+            comtypes.CoUninitialize()
+```
+
+```python Event Handler
+class FocusChangedEventHandler:
+    def __init__(self, watchdog: WatchDog):
+        self.watchdog = watchdog
+    
+    def HandleFocusChangedEvent(self, sender):
+        """Called by COM when focus changes"""
+        if self.watchdog._focus_callback:
+            self.watchdog._focus_callback(sender)
+```
+</CodeGroup>
+
+## Component Interactions
+
+### Tool Execution Flow
+
+```
+1. MCP Client calls Click tool
+   ↓
+2. __main__.click_tool() receives request
+   ↓
+3. @with_analytics wrapper logs tool invocation
+   ↓
+4. If label provided, Desktop.get_coordinates_from_label()
+   queries tree_state for element coordinates
+   ↓
+5. Desktop.click() delegates to uia.Click(x, y)
+   ↓
+6. uia.Click() uses Win32 mouse_event API
+   ↓
+7. Return result string to MCP client
+```
+
+### Snapshot Capture Flow
+
+```
+1. MCP Client calls Snapshot tool
+   ↓
+2. Desktop.get_state() orchestrates capture:
+   │
+   ├─→ Get window handles via Win32 EnumWindows
+   │
+   ├─→ Tree.get_state() captures UI elements:
+   │   ├─→ For each window handle:
+   │   │   ├─→ ControlFromHandle() gets root element
+   │   │   ├─→ tree_traversal() recursively walks children
+   │   │   │   ├─→ Check visibility, enabled state
+   │   │   │   ├─→ Extract metadata (name, type, bounds)
+   │   │   │   └─→ Collect interactive & scrollable nodes
+   │   │   └─→ Return TreeState with all nodes
+   │   └─→ WatchDog detects focus changes (async)
+   │
+   ├─→ ImageGrab.grab() captures screenshot
+   │
+   ├─→ get_annotated_screenshot() draws labels:
+   │   ├─→ For each interactive node:
+   │   │   ├─→ Draw colored bounding box
+   │   │   └─→ Draw label number
+   │   └─→ Highlight cursor with red circle
+   │
+   └─→ Return DesktopState
+      ↓
+3. Format as text + image for MCP client
+```
+
+## Threading Model
+
+<Accordion title="Why Sequential UI Traversal?">
+UI Automation requires STA (Single-Threaded Apartment). Using `ThreadPoolExecutor` with worker threads that each call `CoInitialize()` creates multiple STA threads, causing **cross-apartment marshaling deadlocks** when the main thread also does COM operations (e.g., `ControlFromHandle`, `is_window_browser`).
+
+Windows-MCP uses **sequential processing** to keep all UIA COM calls in the main thread's STA, eliminating deadlocks.
+
+```python
+# ❌ BAD: Multi-threaded traversal (causes deadlocks)
+with ThreadPoolExecutor() as executor:
+    futures = [executor.submit(get_nodes, handle) for handle in handles]
+    results = [f.result() for f in futures]
+
+# ✅ GOOD: Sequential processing
+for handle in handles:
+    result = get_nodes(handle)
+    results.append(result)
+```
+</Accordion>
+
+**Thread Architecture**:
+- **Main Thread**: FastMCP server, Desktop service, Tree service, UIAutomation calls
+- **WatchDog Thread**: COM event loop for focus monitoring (separate STA)
+- **Analytics Thread**: PostHog telemetry (if enabled)
+
+## Performance Optimizations
+
+1. **Caching**: Tree traversal uses `CacheRequest` to pre-fetch properties in bulk (reduces COM round-trips by ~10x)
+2. **Retry Logic**: Failed window traversals are retried with exponential backoff (`THREAD_MAX_RETRIES=3`)
+3. **Screenshot Scaling**: Screenshots capped to 1920x1080 for token efficiency
+4. **Fuzzy Matching**: App launch uses `thefuzz` for forgiving name matching (70% threshold)
+5. **Virtual Desktop Tracking**: `vdm/core.py` filters windows to current desktop (Win10/11)
+
+## Security Context
+
+<Note>
+**Full System Access**: Windows-MCP has unrestricted access to the Windows OS with no sandboxing. Tools like `Shell` and `App` can perform **irreversible operations**. Recommended deployment target is a **VM or Windows Sandbox**.
+</Note>
+
+See [Security Policy](https://github.com/CursorTouch/Windows-MCP/blob/main/SECURITY.md) for deployment guidelines.
